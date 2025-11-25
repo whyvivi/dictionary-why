@@ -1,0 +1,18 @@
+# 依赖目录
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# 构建产物
+dist/
+build/
+
+# 环境变量（千万不要传上去）
+.env
+*.env
+backend/.env
+frontend/.env
+
+# 日志
+*.log
+logs/

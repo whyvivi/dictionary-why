@@ -1,0 +1,138 @@
+// Prisma 数据模型定义
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"  // 使用 SQLite 作为开发数据库,生产环境可改为 postgresql
+  url      = env("DATABASE_URL")
+}
+
+// 用户表
+model User {
+  id           Int      @id @default(autoincrement())  // 主键,自增
+  email        String   @unique                        // 邮箱,唯一索引
+  passwordHash String   @map("password_hash")          // 密码哈希值
+  nickname     String                                  // 用户昵称
+  avatarUrl    String?  @map("avatar_url")             // 头像 URL,可为空
+  createdAt    DateTime @default(now()) @map("created_at")  // 创建时间
+
+  notebooks        Notebook[]         // 用户的单词本列表
+  flashcards       Flashcard[]        // 用户的闪卡列表
+  generatedArticles GeneratedArticle[] // 用户生成的文章列表
+
+  @@map("users")  // 映射到数据库表名 users
+}
+
+// 单词表 - 本地缓存的单词基础信息
+model Word {
+  id          Int         @id @default(autoincrement())  // 主键,自增
+  spelling    String      @unique                        // 单词拼写(小写形式),唯一索引
+  phoneticUk  String?     @map("phonetic_uk")            // 英式音标字符串,可为空
+  phoneticUs  String?     @map("phonetic_us")            // 美式音标字符串,可为空
+  audioUkUrl  String?     @map("audio_uk_url")           // 英式发音音频地址,可为空
+  audioUsUrl  String?     @map("audio_us_url")           // 美式发音音频地址,可为空
+  createdAt   DateTime    @default(now()) @map("created_at")  // 创建时间
+  updatedAt   DateTime    @updatedAt @map("updated_at")  // 更新时间
+  
+  senses         WordSense[]     // 关联的义项列表
+  notebookWords  NotebookWord[]  // 关联的单词本记录
+  flashcards     Flashcard[]     // 关联的闪卡列表
+
+  @@map("words")  // 映射到数据库表名 words
+}
+
+// 义项/释义表 - 单词的各个义项
+model WordSense {
+  id           Int       @id @default(autoincrement())  // 主键,自增
+  wordId       Int       @map("word_id")                // 外键,关联到 words.id
+  senseOrder   Int       @map("sense_order")            // 该单词第几条义项(从 1 开始)
+  partOfSpeech String    @map("part_of_speech")         // 词性字符串(如 "noun"、"verb")
+  definitionEn String    @map("definition_en")          // 英文释义
+  definitionZh String?   @map("definition_zh")          // 中文释义(当前阶段可能为空,后续由翻译/大模型补全)
+  createdAt    DateTime  @default(now()) @map("created_at")  // 创建时间
+  
+  word         Word      @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  examples     Example[] // 关联的例句列表
+
+  @@map("word_senses")  // 映射到数据库表名 word_senses
+}
+
+// 例句表 - 义项的例句
+model Example {
+  id         Int       @id @default(autoincrement())  // 主键,自增
+  senseId    Int       @map("sense_id")               // 外键,关联到 word_senses.id
+  sentenceEn String?   @map("sentence_en")            // 英文例句,可为空
+  sentenceZh String?   @map("sentence_zh")            // 中文例句翻译,可为空(当前阶段例句来自免费字典 API 或占位数据,后续可由大模型生成)
+  
+  sense      WordSense @relation(fields: [senseId], references: [id], onDelete: Cascade)
+
+  @@map("examples")  // 映射到数据库表名 examples
+}
+
+// 单词本表 - 用户的单词本,用于组织和管理收藏的单词
+model Notebook {
+  id          Int      @id @default(autoincrement())  // 主键,自增
+  userId      Int      @map("user_id")                // 外键,关联到 users.id,表示属于哪个用户
+  name        String                                  // 单词本名称,如"默认单词本"、"托福词汇"
+  description String?                                 // 单词本描述,可为空
+  isDefault   Boolean  @default(false) @map("is_default")  // 是否为该用户的默认单词本(每个用户最多一个)
+  createdAt   DateTime @default(now()) @map("created_at")  // 创建时间
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notebookWords     NotebookWord[]     // 单词本中的单词列表
+  flashcards        Flashcard[]        // 来自该单词本的闪卡
+  generatedArticles GeneratedArticle[] // 基于该单词本生成的文章
+
+  @@map("notebooks")  // 映射到数据库表名 notebooks
+}
+
+// 单词本-单词关联表 - 记录某个单词本中包含哪些单词
+model NotebookWord {
+  id         Int      @id @default(autoincrement())  // 主键,自增
+  notebookId Int      @map("notebook_id")            // 外键,关联到 notebooks.id
+  wordId     Int      @map("word_id")                // 外键,关联到 words.id
+  addedAt    DateTime @default(now()) @map("added_at")  // 加入时间
+
+  notebook Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+  word     Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  @@unique([notebookId, wordId])  // 唯一索引,避免同一单词被重复加入同一单词本
+  @@map("notebook_words")  // 映射到数据库表名 notebook_words
+}
+
+// 闪卡表 - 用户的学习闪卡,支持间隔重复复习
+model Flashcard {
+  id             Int       @id @default(autoincrement())  // 主键,自增
+  userId         Int       @map("user_id")                // 外键,关联到 users.id
+  wordId         Int       @map("word_id")                // 外键,关联到 words.id
+  notebookId     Int?      @map("notebook_id")            // 外键,可为空,表示该闪卡来自哪个单词本
+  source         String                                   // 闪卡来源:"search"(查词页创建) / "notebook"(单词本创建)
+  status         String    @default("new")                // 复习状态:"new"(新卡片) / "learning"(学习中) / "reviewed"(已复习)
+  createdAt      DateTime  @default(now()) @map("created_at")      // 创建时间
+  lastReviewedAt DateTime? @map("last_reviewed_at")       // 上次复习时间,可为空
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  word     Word      @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  notebook Notebook? @relation(fields: [notebookId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, wordId])  // 唯一索引,避免同一用户为同一单词创建多张闪卡
+  @@map("flashcards")  // 映射到数据库表名 flashcards
+}
+
+// 生成文章表 - 基于单词本生成的文章(当前为占位实现,未来对接大模型)
+model GeneratedArticle {
+  id         Int      @id @default(autoincrement())  // 主键,自增
+  userId     Int      @map("user_id")                // 外键,关联到 users.id
+  notebookId Int      @map("notebook_id")            // 外键,关联到 notebooks.id
+  title      String                                  // 文章标题
+  content    String                                  // 文章正文(长文本)
+  createdAt  DateTime @default(now()) @map("created_at")  // 创建时间
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notebook Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+
+  @@map("generated_articles")  // 映射到数据库表名 generated_articles
+}
+
