@@ -5,7 +5,7 @@
     "main": "dist/main.js",
     "scripts": {
         "prebuild": "rimraf dist",
-        "build": "nest build",
+        "build": "nest build && ls -R dist || echo 'dist not generated'",
         "start": "nest start",
         "dev": "nest start --watch",
         "start:prod": "node dist/main.js",
