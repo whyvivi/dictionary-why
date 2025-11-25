@@ -2,13 +2,13 @@
     "name": "dictionary-why-backend",
     "version": "1.0.0",
     "description": "个人英语词典后端服务",
-    "main": "dist/main.js",
+    "main": "dist/src/main.js",
     "scripts": {
         "prebuild": "rimraf dist",
-        "build": "nest build && ls -R dist || echo 'dist not generated'",
+        "build": "nest build",
         "start": "nest start",
         "dev": "nest start --watch",
-        "start:prod": "node dist/main.js",
+        "start:prod": "node dist/src/main.js",
         "prisma:generate": "prisma generate",
         "prisma:migrate": "prisma migrate dev",
         "prisma:studio": "prisma studio"
