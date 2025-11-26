@@ -12,6 +12,9 @@ async function bootstrap() {
         credentials: true,     // 如果后面要用到 cookie，可以保留
     });
 
+    // 设置全局路由前缀为 /api
+    app.setGlobalPrefix('api');
+
     // Render 会通过环境变量 PORT 指定端口，这里要优先读取
     const port = process.env.PORT || 3000;
     await app.listen(port);
