@@ -1,6 +1,7 @@
 # Why Dictionary - 后端服务
 
 个人英语词典应用的后端服务,基于 NestJS + TypeScript + Prisma + SQLite 构建。
+部署1
 
 ## 技术栈
 
