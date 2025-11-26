@@ -110,6 +110,8 @@ model Flashcard {
   notebookId     Int?      @map("notebook_id")            // 外键,可为空,表示该闪卡来自哪个单词本
   source         String                                   // 闪卡来源:"search"(查词页创建) / "notebook"(单词本创建)
   status         String    @default("new")                // 复习状态:"new"(新卡片) / "learning"(学习中) / "reviewed"(已复习)
+  proficiency    Int       @default(0)                    // 熟练度(0-5), 达到5自动移除
+  nextReviewDate DateTime  @default(now()) @map("next_review_date") // 下次复习日期
   createdAt      DateTime  @default(now()) @map("created_at")      // 创建时间
   lastReviewedAt DateTime? @map("last_reviewed_at")       // 上次复习时间,可为空
 

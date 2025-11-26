@@ -46,18 +46,69 @@ export class FlashcardsService {
     }
 
     /**
+     * 删除闪卡
+     */
+    async deleteFlashcard(userId: number, id: number) {
+        const flashcard = await this.prisma.flashcard.findUnique({
+            where: { id },
+        });
+
+        if (!flashcard) {
+            throw new NotFoundException('闪卡不存在');
+        }
+
+        if (flashcard.userId !== userId) {
+            throw new ForbiddenException('无权操作该闪卡');
+        }
+
+        return this.prisma.flashcard.delete({
+            where: { id },
+        });
+    }
+
+    /**
+     * 获取所有闪卡（列表模式）
+     */
+    async getAllFlashcards(userId: number) {
+        const flashcards = await this.prisma.flashcard.findMany({
+            where: { userId },
+            include: {
+                word: true,
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+        });
+
+        return flashcards.map(fc => ({
+            id: fc.id,
+            wordId: fc.wordId,
+            spelling: fc.word.spelling,
+            phoneticUk: fc.word.phoneticUk,
+            phoneticUs: fc.word.phoneticUs,
+            status: fc.status,
+            proficiency: fc.proficiency,
+            nextReviewDate: fc.nextReviewDate,
+        }));
+    }
+
+    /**
      * 获取复习闪卡列表
      */
     async getFlashcardsToReview(userId: number, mode: string = 'recent', notebookId?: number, limit: number = 20) {
-        const whereClause: any = { userId };
+        const whereClause: any = {
+            userId,
+            // 只获取下次复习时间 <= 现在的卡片
+            nextReviewDate: {
+                lte: new Date(),
+            },
+        };
 
         // 如果是单词本模式，过滤 notebookId
         if (mode === 'notebook' && notebookId) {
             whereClause.notebookId = notebookId;
         }
 
-        // 简单的复习逻辑：获取所有闪卡，按创建时间或上次复习时间排序
-        // 实际应用中这里应该有更复杂的间隔重复算法（如 SM-2）
         const flashcards = await this.prisma.flashcard.findMany({
             where: whereClause,
             include: {
@@ -75,9 +126,8 @@ export class FlashcardsService {
                 },
             },
             orderBy: [
-                { status: 'asc' }, // 先复习 new/learning，后 reviewed
-                { lastReviewedAt: 'asc' }, // 久未复习的优先
-                { createdAt: 'desc' },
+                { nextReviewDate: 'asc' }, // 逾期最久的优先
+                { proficiency: 'asc' },    // 不熟练的优先
             ],
             take: limit,
         });
@@ -90,6 +140,7 @@ export class FlashcardsService {
             phoneticUk: fc.word.phoneticUk,
             phoneticUs: fc.word.phoneticUs,
             status: fc.status,
+            proficiency: fc.proficiency,
             senses: fc.word.senses.map(s => ({
                 partOfSpeech: s.partOfSpeech,
                 definitionEn: s.definitionEn,
@@ -118,19 +169,46 @@ export class FlashcardsService {
             throw new ForbiddenException('无权操作该闪卡');
         }
 
-        // 简单的状态更新逻辑
-        let newStatus = flashcard.status;
+        let newProficiency = flashcard.proficiency;
+        let nextReviewDate = new Date();
+
         if (dto.result === 'good') {
-            newStatus = 'reviewed';
+            // 认识：熟练度 +1
+            newProficiency += 1;
+
+            // 如果熟练度达到 5，自动移除
+            if (newProficiency >= 5) {
+                await this.prisma.flashcard.delete({
+                    where: { id: flashcard.id },
+                });
+                return { status: 'deleted', message: '已完全掌握，移除闪卡' };
+            }
+
+            // 计算下次复习时间：2^proficiency 天后
+            // 0 -> 1天, 1 -> 2天, 2 -> 4天, 3 -> 8天, 4 -> 16天
+            const daysToAdd = Math.pow(2, newProficiency - 1); // proficiency 已经是+1后的值了，这里稍微调整算法
+            // 修正算法：
+            // proficiency 0 (new) -> good -> 1 => 1 day
+            // proficiency 1 -> good -> 2 => 2 days
+            // proficiency 2 -> good -> 3 => 4 days
+            // proficiency 3 -> good -> 4 => 8 days
+            const days = Math.max(1, Math.pow(2, newProficiency - 1));
+            nextReviewDate.setDate(nextReviewDate.getDate() + days);
+
         } else if (dto.result === 'again') {
-            newStatus = 'learning'; // 或者保持 new，视具体逻辑而定
+            // 不认识：熟练度重置或保持低位
+            // 策略：重置为 0，立即复习（nextReviewDate 保持为 now）
+            newProficiency = 0;
+            // nextReviewDate 默认为 now，所以不需要改变
         }
 
         return this.prisma.flashcard.update({
             where: { id: dto.flashcardId },
             data: {
-                status: newStatus,
+                status: newProficiency > 0 ? 'learning' : 'new',
+                proficiency: newProficiency,
                 lastReviewedAt: new Date(),
+                nextReviewDate: nextReviewDate,
             },
         });
     }

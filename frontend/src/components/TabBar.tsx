@@ -23,7 +23,7 @@ function TabBar() {
         },
         {
             id: 'flashcard',
-            path: '/flashcard',
+            path: '/flashcards/list',
             label: '闪卡',
             icon: '🎴',
         },

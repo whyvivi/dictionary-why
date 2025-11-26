@@ -3,7 +3,8 @@ import AuthPage from './pages/AuthPage';
 import MainLayout from './pages/MainLayout';
 import SearchPage from './pages/SearchPage';
 import WordbookPage from './pages/WordbookPage';
-import FlashcardPage from './pages/FlashcardPage';
+import FlashcardListPage from './pages/FlashcardListPage';
+import FlashcardReviewPage from './pages/FlashcardReviewPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -28,8 +29,12 @@ function App() {
                     <Route path="search" element={<SearchPage />} />
                     {/* 单词本页 */}
                     <Route path="wordbook" element={<WordbookPage />} />
-                    {/* 闪卡页 */}
-                    <Route path="flashcard" element={<FlashcardPage />} />
+                    {/* 闪卡列表页 */}
+                    <Route path="flashcards/list" element={<FlashcardListPage />} />
+                    {/* 闪卡复习页 */}
+                    <Route path="flashcards/review" element={<FlashcardReviewPage />} />
+                    {/* 兼容旧路由，重定向到列表 */}
+                    <Route path="flashcard" element={<Navigate to="/flashcards/list" replace />} />
                 </Route>
 
                 {/* 404 重定向 */}

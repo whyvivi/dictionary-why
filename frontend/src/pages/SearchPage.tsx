@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import SearchBar from '../components/SearchBar';
 import { WordHeader } from '../components/WordHeader';
 import DefinitionCard from '../components/DefinitionCard';
 import ExampleCard from '../components/ExampleCard';
 import MemoryImageCard from '../components/MemoryImageCard';
-import { FlashcardButton } from '../components/FlashcardButton';
 import { fetchWordDetail, WordDetail } from '../utils/wordApi';
 
 /**
@@ -12,15 +12,27 @@ import { fetchWordDetail, WordDetail } from '../utils/wordApi';
  * 提供单词查询功能,展示单词详情、释义、例句等
  */
 function SearchPage() {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [wordDetail, setWordDetail] = useState<WordDetail | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // 监听 URL 参数变化
+    useEffect(() => {
+        const query = searchParams.get('q');
+        if (query) {
+            handleSearch(query);
+        }
+    }, [searchParams]);
 
     // 处理查词请求
     const handleSearch = async (query: string) => {
         setIsLoading(true);
         setError(null);
         setWordDetail(null);
+
+        // 更新 URL
+        setSearchParams({ q: query });
 
         try {
             const result = await fetchWordDetail(query);
@@ -90,17 +102,6 @@ function SearchPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* 记忆联想图(占位) */}
                         <MemoryImageCard word={wordDetail.spelling} />
-
-                        {/* 闪卡入口 */}
-                        <div className="flex flex-col justify-center">
-                            <div className="bg-white/40 backdrop-blur-md rounded-2xl p-6 border border-white/50 shadow-lg">
-                                <h3 className="text-lg font-bold text-gray-800 mb-2">学习助手</h3>
-                                <p className="text-gray-600 text-sm mb-4">
-                                    将这个单词加入闪卡，利用间隔重复算法高效记忆。
-                                </p>
-                                <FlashcardButton wordId={wordDetail.id} />
-                            </div>
-                        </div>
                     </div>
                 </div>
             )}

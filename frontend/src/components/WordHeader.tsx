@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { notebookApi } from '../utils/notebookApi';
+import { flashcardApi } from '../utils/flashcardApi';
+import { Toast } from './Toast';
 
 interface WordHeaderProps {
     word: string;
@@ -7,12 +9,44 @@ interface WordHeaderProps {
     phoneticUs?: string;
     audioUk?: string;
     audioUs?: string;
-    wordId?: number; // 新增 wordId 属性
+    wordId?: number;
 }
 
 export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phoneticUs, audioUk, audioUs, wordId }) => {
     const [isPlaying, setIsPlaying] = useState<'uk' | 'us' | null>(null);
-    const [isCollecting, setIsCollecting] = useState(false);
+    const [isCollected, setIsCollected] = useState(false);
+    const [isInFlashcard, setIsInFlashcard] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+    const [defaultNotebookId, setDefaultNotebookId] = useState<number | null>(null);
+    const [flashcardId, setFlashcardId] = useState<number | null>(null);
+
+    // 初始化检查状态
+    useEffect(() => {
+        if (!wordId) return;
+        checkStatus();
+    }, [wordId]);
+
+    const checkStatus = async () => {
+        if (!wordId) return;
+        try {
+            // 1. 检查收藏状态
+            const nb = await notebookApi.getDefault();
+            setDefaultNotebookId(nb.id);
+            const detail = await notebookApi.getDetail(nb.id);
+            const foundInNotebook = detail.words.some(w => w.wordId === wordId);
+            setIsCollected(foundInNotebook);
+
+            // 2. 检查闪卡状态
+            const flashcards = await flashcardApi.getAll();
+            const foundCard = flashcards.find(fc => fc.wordId === wordId);
+            setIsInFlashcard(!!foundCard);
+            if (foundCard) setFlashcardId(foundCard.id);
+
+        } catch (error) {
+            console.error('检查状态失败:', error);
+        }
+    };
 
     const playAudio = (url: string, type: 'uk' | 'us') => {
         if (!url) return;
@@ -26,32 +60,65 @@ export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phonet
     };
 
     const handleCollect = async () => {
-        if (!wordId) {
-            alert('无法收藏：缺少单词 ID');
-            return;
-        }
-
-        setIsCollecting(true);
+        if (!wordId || !defaultNotebookId) return;
+        setIsLoading(true);
         try {
-            // 1. 获取默认单词本
-            const defaultNotebook = await notebookApi.getDefault();
-            // 2. 添加单词
-            await notebookApi.addWord(defaultNotebook.id, wordId);
-            alert('已加入默认单词本');
-        } catch (error: any) {
-            console.error('收藏失败:', error);
-            if (error.response?.status === 409) {
-                alert('该单词已在默认单词本中');
+            if (isCollected) {
+                // 取消收藏
+                await notebookApi.removeWord(defaultNotebookId, wordId);
+                setIsCollected(false);
+                setToast({ message: '收藏已取消', type: 'info' });
             } else {
-                alert('收藏失败，请重试');
+                // 加入收藏
+                await notebookApi.addWord(defaultNotebookId, wordId);
+                setIsCollected(true);
+                setToast({ message: '已加入收藏', type: 'success' });
             }
+        } catch (error) {
+            console.error('操作失败:', error);
+            setToast({ message: '操作失败', type: 'error' });
         } finally {
-            setIsCollecting(false);
+            setIsLoading(false);
+        }
+    };
+
+    const handleFlashcard = async () => {
+        if (!wordId) return;
+        setIsLoading(true);
+        try {
+            if (isInFlashcard) {
+                // 移除闪卡 (Step 5)
+                if (flashcardId) {
+                    await flashcardApi.delete(flashcardId);
+                    setIsInFlashcard(false);
+                    setFlashcardId(null);
+                    setToast({ message: '已从闪卡移除', type: 'info' });
+                }
+            } else {
+                // 加入闪卡
+                const newCard = await flashcardApi.create(wordId);
+                setIsInFlashcard(true);
+                setFlashcardId(newCard.id);
+                setToast({ message: '已加入闪卡', type: 'success' });
+            }
+        } catch (error) {
+            console.error('操作失败:', error);
+            setToast({ message: '操作失败', type: 'error' });
+        } finally {
+            setIsLoading(false);
         }
     };
 
     return (
-        <div className="bg-white/40 backdrop-blur-md rounded-2xl p-6 border border-white/50 shadow-lg mb-6 animate-fade-in-down">
+        <div className="bg-white/40 backdrop-blur-md rounded-2xl p-6 border border-white/50 shadow-lg mb-6 animate-fade-in-down relative">
+            {toast && (
+                <Toast
+                    message={toast.message}
+                    type={toast.type}
+                    onClose={() => setToast(null)}
+                />
+            )}
+
             <div className="flex justify-between items-start">
                 <div>
                     <h1 className="text-4xl font-bold text-gray-800 mb-2">{word}</h1>
@@ -88,16 +155,33 @@ export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phonet
                         )}
                     </div>
                 </div>
-                <button
-                    onClick={handleCollect}
-                    disabled={isCollecting}
-                    className="p-2 bg-white/50 hover:bg-white/80 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-sm group"
-                    title="收藏到单词本"
-                >
-                    <svg className={`w-6 h-6 ${isCollecting ? 'text-gray-400' : 'text-yellow-500 group-hover:text-yellow-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                    </svg>
-                </button>
+
+                {/* 按钮组 */}
+                <div className="flex gap-3">
+                    <button
+                        onClick={handleCollect}
+                        disabled={isLoading}
+                        className={`px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-2 ${isCollected
+                                ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200'
+                                : 'bg-white/50 text-gray-600 hover:bg-white/80'
+                            }`}
+                        title={isCollected ? "取消收藏" : "加入收藏"}
+                    >
+                        <span>{isCollected ? '⭐ 已收藏' : '⭐ 收藏'}</span>
+                    </button>
+
+                    <button
+                        onClick={handleFlashcard}
+                        disabled={isLoading}
+                        className={`px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-2 ${isInFlashcard
+                                ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                                : 'bg-pink-500 text-white hover:bg-pink-600'
+                            }`}
+                        title={isInFlashcard ? "移除闪卡" : "加入闪卡"}
+                    >
+                        <span>{isInFlashcard ? '🃏 已加入' : '🃏 加入闪卡'}</span>
+                    </button>
+                </div>
             </div>
         </div>
     );

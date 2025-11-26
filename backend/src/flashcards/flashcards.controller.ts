@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, UseGuards, Request, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Query, Param, UseGuards, Request, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FlashcardsService } from './flashcards.service';
 import { CreateFlashcardDto, ReviewFlashcardDto } from './dto/flashcard.dto';
@@ -14,6 +14,14 @@ export class FlashcardsController {
     @Post()
     async createFlashcard(@Request() req, @Body() dto: CreateFlashcardDto) {
         return this.flashcardsService.createFlashcard(req.user.id, dto);
+    }
+
+    /**
+     * 获取所有闪卡（列表模式）
+     */
+    @Get('all')
+    async getAllFlashcards(@Request() req) {
+        return this.flashcardsService.getAllFlashcards(req.user.id);
     }
 
     /**
@@ -36,5 +44,13 @@ export class FlashcardsController {
     @Post('review')
     async reviewFlashcard(@Request() req, @Body() dto: ReviewFlashcardDto) {
         return this.flashcardsService.reviewFlashcard(req.user.id, dto);
+    }
+
+    /**
+     * 删除闪卡
+     */
+    @Delete(':id')
+    async deleteFlashcard(@Request() req, @Param('id', ParseIntPipe) id: number) {
+        return this.flashcardsService.deleteFlashcard(req.user.id, id);
     }
 }

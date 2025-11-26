@@ -7,6 +7,8 @@ export interface Flashcard {
     phoneticUk?: string;
     phoneticUs?: string;
     status: string;
+    proficiency: number;
+    nextReviewDate: string;
     senses: {
         partOfSpeech: string;
         definitionEn: string;
@@ -25,6 +27,12 @@ export const flashcardApi = {
         return response.data;
     },
 
+    // 获取所有闪卡（列表模式）
+    getAll: async (): Promise<Flashcard[]> => {
+        const response = await api.get('/flashcards/all');
+        return response.data;
+    },
+
     // 获取复习列表
     getReviewList: async (mode: 'recent' | 'notebook' = 'recent', notebookId?: number): Promise<Flashcard[]> => {
         const params: any = { mode };
@@ -38,6 +46,12 @@ export const flashcardApi = {
     // 提交复习结果
     review: async (flashcardId: number, result: 'good' | 'again'): Promise<any> => {
         const response = await api.post('/flashcards/review', { flashcardId, result });
+        return response.data;
+    },
+
+    // 删除闪卡
+    delete: async (id: number): Promise<any> => {
+        const response = await api.delete(`/flashcards/${id}`);
         return response.data;
     },
 };

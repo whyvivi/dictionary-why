@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { NotebookDetail as NotebookDetailType } from '../utils/notebookApi';
 
 interface NotebookDetailProps {
@@ -9,6 +10,8 @@ interface NotebookDetailProps {
 }
 
 export const NotebookDetail: React.FC<NotebookDetailProps> = ({ detail, onRemoveWord, onGenerateArticle, isGenerating }) => {
+    const navigate = useNavigate();
+
     return (
         <div className="h-full flex flex-col">
             {/* 头部信息 */}
@@ -43,7 +46,8 @@ export const NotebookDetail: React.FC<NotebookDetailProps> = ({ detail, onRemove
                     detail.words.map((word) => (
                         <div
                             key={word.wordId}
-                            className="group flex items-center justify-between p-3 bg-white/40 rounded-lg border border-white/30 hover:bg-white/60 transition-colors"
+                            onClick={() => navigate(`/search?q=${word.spelling}`)}
+                            className="group flex items-center justify-between p-3 bg-white/40 rounded-lg border border-white/30 hover:bg-white/60 transition-colors cursor-pointer"
                         >
                             <div className="flex items-baseline gap-3">
                                 <span className="font-bold text-lg text-gray-800">{word.spelling}</span>
