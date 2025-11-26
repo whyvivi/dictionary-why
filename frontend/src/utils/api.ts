@@ -1,8 +1,31 @@
 import axios from 'axios';
 
+/**
+ * 统一的后端 API 客户端配置
+ * 
+ * 环境说明：
+ * 1. 本地开发环境：
+ *    - VITE_API_BASE_URL 默认为 http://localhost:3000
+ *    - 最终 baseURL 为 http://localhost:3000/api
+ * 
+ * 2. 云端部署环境（Vercel）：
+ *    - 需要在 Vercel 环境变量中设置 VITE_API_BASE_URL
+ *    - 例如：VITE_API_BASE_URL="https://dictionary-backend-z9k0.onrender.com"
+ *    - 最终 baseURL 为 https://dictionary-backend-z9k0.onrender.com/api
+ * 
+ * 注意：环境变量中只存储后端根域名，不要包含 /api 路径，代码会自动拼接
+ */
+
+// 从环境变量读取后端根地址（不含 /api）
+// 本地开发默认为 http://localhost:3000
+const BACKEND_ROOT = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
+// 拼接完整的 API 基础地址（根地址 + /api）
+const API_BASE_URL = `${BACKEND_ROOT}/api`;
+
 // 创建 axios 实例
 const api = axios.create({
-    baseURL: '/api',  // 使用 Vite 代理,会自动转发到 http://localhost:3000/api
+    baseURL: API_BASE_URL,
     timeout: 10000,
     headers: {
         'Content-Type': 'application/json',

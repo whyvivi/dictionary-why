@@ -82,6 +82,63 @@ npm run dev
 
 服务将在 `http://localhost:3000` 启动。
 
+## 云端部署配置
+
+### Render 部署
+
+将后端部署到 Render 时,需要在 Render 控制台配置以下环境变量:
+
+#### 必需环境变量
+
+| 变量名 | 说明 | 示例值 |
+|--------|------|--------|
+| `DATABASE_URL` | PostgreSQL 连接字符串 | `postgresql://user:pass@host:5432/dbname` |
+| `JWT_SECRET` | JWT 加密密钥(请使用强随机密码) | `your-super-secret-key-change-this` |
+| `FRONTEND_ORIGIN` | 允许访问的前端域名(CORS 配置) | `https://your-frontend.vercel.app` |
+
+#### 可选环境变量
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `JWT_EXPIRES_IN` | JWT 过期时间 | `7d` |
+| `PORT` | 服务端口(Render 会自动设置) | `3000` |
+
+#### 配置步骤
+
+1. 在 Render 创建 PostgreSQL 数据库服务
+2. 复制 PostgreSQL 的 `External Database URL`,设置为 `DATABASE_URL` 环境变量
+3. 生成一个强随机密钥作为 `JWT_SECRET`
+4. 设置 `FRONTEND_ORIGIN` 为前端 Vercel 域名(例如 `https://your-app.vercel.app`)
+5. 部署完成后,复制 Render 提供的后端 URL(例如 `https://your-backend.onrender.com`)
+
+### Vercel + Render 联合部署
+
+前端(Vercel)和后端(Render)需要配合配置环境变量:
+
+**后端(Render):**
+```bash
+FRONTEND_ORIGIN="https://your-frontend.vercel.app"
+```
+
+**前端(Vercel):**
+```bash
+VITE_API_BASE_URL="https://your-backend.onrender.com"
+```
+
+> **注意**: 
+> - `FRONTEND_ORIGIN` 应设置为前端的完整域名,不要包含尾部斜杠
+> - `VITE_API_BASE_URL` 应设置为后端的完整 URL,不要包含 `/api` 路径
+> - 后端会自动添加全局前缀 `/api`,前端会自动拼接路径
+
+### 安全建议
+
+1. **JWT_SECRET**: 使用至少 32 位的强随机密钥
+2. **DATABASE_URL**: 确保数据库密码足够复杂
+3. **FRONTEND_ORIGIN**: 只允许特定的前端域名访问,不要使用通配符
+4. **环境变量**: 所有敏感信息都通过环境变量配置,不要硬编码到代码中
+
+
+
 ## 可用脚本
 
 - `npm run dev` - 启动开发服务器(热重载)

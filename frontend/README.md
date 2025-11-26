@@ -153,6 +153,62 @@ proxy: {
 }
 ```
 
+## 环境变量配置
+
+### 配置说明
+
+前端使用 `VITE_API_BASE_URL` 环境变量来指定后端 API 的根地址。
+
+**重要：** 环境变量中只存储后端的**根域名**，不要包含 `/api` 路径，代码会自动拼接。
+
+**工作原理:**
+- **本地开发**: 如果未设置 `VITE_API_BASE_URL`，默认使用 `http://localhost:3000`，代码自动拼接为 `http://localhost:3000/api`
+- **云端部署**: 设置 `VITE_API_BASE_URL` 为后端根域名（如 `https://dictionary-backend-z9k0.onrender.com`），代码自动拼接为 `https://dictionary-backend-z9k0.onrender.com/api`
+
+### 本地开发环境
+
+本地开发时，通常不需要设置环境变量。前端会默认使用 `http://localhost:3000`:
+
+```bash
+# .env.development (可选，默认不需要设置)
+# VITE_API_BASE_URL="http://localhost:3000"
+```
+
+如果想在本地前端测试云端后端，可以创建 `.env.development.local` 文件:
+
+```bash
+# 连接云端后端进行测试（只填根域名，不要加 /api）
+VITE_API_BASE_URL="https://dictionary-backend-z9k0.onrender.com"
+```
+
+### Vercel 部署环境
+
+部署到 Vercel 时，需要在 Vercel 控制台配置环境变量:
+
+1. 打开 Vercel 项目设置页面
+2. 进入 **Settings** → **Environment Variables**
+3. 添加环境变量:
+   - **Name**: `VITE_API_BASE_URL`
+   - **Value**: 后端的根域名（例如 `https://dictionary-backend-z9k0.onrender.com`）
+   - **Environment**: 选择 `Production`、`Preview` 或 `Development`
+
+> **重要提示**: 
+> - ✅ 正确：`https://dictionary-backend-z9k0.onrender.com`
+> - ❌ 错误：`https://dictionary-backend-z9k0.onrender.com/api`
+> - 代码会自动拼接 `/api` 路径，不要手动添加
+
+配置完成后，重新部署前端即可。
+
+### 环境变量文件说明
+
+- `.env.development` - 开发环境配置(已在 `.gitignore` 中忽略)
+- `.env.production` - 生产环境配置(已在 `.gitignore` 中忽略)
+- `.env.example` - 配置示例文件(提交到 Git)
+- `.env.development.local` - 本地开发覆盖配置(已在 `.gitignore` 中忽略)
+
+
+```
+
 ## 认证流程
 
 ### 1. 登录

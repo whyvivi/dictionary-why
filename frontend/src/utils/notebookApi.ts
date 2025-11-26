@@ -1,18 +1,4 @@
-import axios from 'axios';
-
-// 配置 axios 实例
-const api = axios.create({
-    baseURL: '/api',
-});
-
-// 添加请求拦截器，自动附加 Token
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
+import api from './api';
 
 export interface Notebook {
     id: number;

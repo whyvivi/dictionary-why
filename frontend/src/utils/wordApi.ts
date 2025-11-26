@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from './api';
 
 /**
  * 单词详情接口返回类型
@@ -37,14 +37,7 @@ export interface WordSearchResult {
  * @returns 单词详情
  */
 export async function fetchWordDetail(spelling: string): Promise<WordDetail> {
-    const token = localStorage.getItem('token');
-
-    const response = await axios.get(`/api/words/${spelling}`, {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
-
+    const response = await api.get(`/words/${spelling}`);
     return response.data;
 }
 
@@ -54,14 +47,8 @@ export async function fetchWordDetail(spelling: string): Promise<WordDetail> {
  * @returns 匹配的单词列表
  */
 export async function searchWords(query: string): Promise<WordSearchResult[]> {
-    const token = localStorage.getItem('token');
-
-    const response = await axios.get('/api/words/search', {
+    const response = await api.get('/words/search', {
         params: { query },
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
     });
-
     return response.data;
 }
