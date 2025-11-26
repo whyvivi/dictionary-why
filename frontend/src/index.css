@@ -18,29 +18,29 @@ body {
 }
 
 /* 新海诚风格的天空渐变背景 */
-.sky-gradient {
-  background: linear-gradient(
-    135deg,
-    #E8F4F8 0%,
-    #B8E1F5 25%,
-    #E8D5F2 50%,
-    #D4B5E8 75%,
-    #FFCDB2 100%
-  );
-  background-size: 400% 400%;
-  animation: gradient-shift 15s ease infinite;
+/* 新海诚风格背景 - 模拟清晨/黄昏的天空 */
+.shinkai-bg {
+  background: linear-gradient(165deg,
+      #4A90E2 0%,
+      /* 顶部深蓝天空 */
+      #87CEEB 40%,
+      /* 中部清澈天蓝 */
+      #E0C3FC 70%,
+      /* 下部淡紫 */
+      #FFD1DC 100%
+      /* 底部粉色晚霞 */
+    );
+  background-attachment: fixed;
+  /* 背景固定，内容滚动 */
 }
 
-@keyframes gradient-shift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+/* 增强玻璃拟态 */
+.glass {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
 }
 
 /* 玻璃拟态效果 */
@@ -104,4 +104,27 @@ textarea:focus {
 .card-float:hover {
   transform: translateY(-4px);
   box-shadow: 0 16px 48px 0 rgba(31, 38, 135, 0.3);
+}
+
+/* 浮动动画 */
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-15px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.animate-float-slow {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-slower {
+  animation: float 8s ease-in-out infinite;
 }

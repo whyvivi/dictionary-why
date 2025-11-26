@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateNotebookDto } from './dto/notebook.dto';
+import { FlashcardsService } from '../flashcards/flashcards.service';
 
 @Injectable()
 export class NotebooksService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private flashcardsService: FlashcardsService,
+    ) { }
 
     /**
      * 获取用户的所有单词本
@@ -82,7 +86,15 @@ export class NotebooksService {
             include: {
                 notebookWords: {
                     include: {
-                        word: true,
+                        word: {
+                            include: {
+                                senses: {
+                                    orderBy: {
+                                        senseOrder: 'asc',
+                                    },
+                                },
+                            },
+                        },
                     },
                     orderBy: {
                         addedAt: 'desc',
@@ -111,6 +123,8 @@ export class NotebooksService {
                 phoneticUk: nw.word.phoneticUk,
                 phoneticUs: nw.word.phoneticUs,
                 addedAt: nw.addedAt,
+                // 添加简短释义（第一条中文释义）
+                definition: nw.word.senses?.[0]?.definitionZh || nw.word.senses?.[0]?.definitionEn || '',
             })),
         };
     }
@@ -143,12 +157,26 @@ export class NotebooksService {
 
         // 3. 尝试添加（利用数据库唯一索引避免重复）
         try {
-            return await this.prisma.notebookWord.create({
+            const result = await this.prisma.notebookWord.create({
                 data: {
                     notebookId,
                     wordId,
                 },
             });
+
+            // 4. 同时创建闪卡（收藏 = 收藏 + 闪卡）
+            try {
+                await this.flashcardsService.createFlashcard(userId, {
+                    wordId,
+                    source: 'notebook',
+                    notebookId,
+                });
+            } catch (flashcardError) {
+                // 闪卡创建失败不影响收藏，静默记录错误
+                console.error('创建闪卡失败:', flashcardError);
+            }
+
+            return result;
         } catch (error) {
             if (error.code === 'P2002') {
                 // 唯一约束冲突，说明已存在，直接返回成功或抛出特定错误
@@ -189,8 +217,18 @@ export class NotebooksService {
         }
 
         // 3. 删除
-        return this.prisma.notebookWord.delete({
+        const result = await this.prisma.notebookWord.delete({
             where: { id: notebookWord.id },
         });
+
+        // 4. 同时删除闪卡（收藏取消 = 收藏移除 + 闪卡移除）
+        try {
+            await this.flashcardsService.deleteByWordId(userId, wordId);
+        } catch (flashcardError) {
+            // 闪卡删除失败不影响收藏移除，静默记录错误
+            console.error('删除闪卡失败:', flashcardError);
+        }
+
+        return result;
     }
 }

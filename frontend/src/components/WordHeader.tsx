@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { notebookApi } from '../utils/notebookApi';
 import { flashcardApi } from '../utils/flashcardApi';
 import { Toast } from './Toast';
+import { StarIcon } from './StarIcon';
 
 interface WordHeaderProps {
     word: string;
@@ -15,13 +16,11 @@ interface WordHeaderProps {
 export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phoneticUs, audioUk, audioUs, wordId }) => {
     const [isPlaying, setIsPlaying] = useState<'uk' | 'us' | null>(null);
     const [isCollected, setIsCollected] = useState(false);
-    const [isInFlashcard, setIsInFlashcard] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
     const [defaultNotebookId, setDefaultNotebookId] = useState<number | null>(null);
-    const [flashcardId, setFlashcardId] = useState<number | null>(null);
 
-    // 初始化检查状态
+    // 初始化检查收藏状态
     useEffect(() => {
         if (!wordId) return;
         checkStatus();
@@ -30,21 +29,14 @@ export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phonet
     const checkStatus = async () => {
         if (!wordId) return;
         try {
-            // 1. 检查收藏状态
+            // 检查是否已收藏（从默认单词本获取）
             const nb = await notebookApi.getDefault();
             setDefaultNotebookId(nb.id);
             const detail = await notebookApi.getDetail(nb.id);
             const foundInNotebook = detail.words.some(w => w.wordId === wordId);
             setIsCollected(foundInNotebook);
-
-            // 2. 检查闪卡状态
-            const flashcards = await flashcardApi.getAll();
-            const foundCard = flashcards.find(fc => fc.wordId === wordId);
-            setIsInFlashcard(!!foundCard);
-            if (foundCard) setFlashcardId(foundCard.id);
-
         } catch (error) {
-            console.error('检查状态失败:', error);
+            console.error('检查收藏状态失败:', error);
         }
     };
 
@@ -59,51 +51,52 @@ export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phonet
         });
     };
 
+    /**
+     * 收藏/取消收藏按钮处理
+     * 收藏 = 加入单词本 + 自动创建闪卡（后端处理）
+     * 取消收藏 = 移除单词本 + 自动删除闪卡（后端处理）
+     */
     const handleCollect = async () => {
-        if (!wordId || !defaultNotebookId) return;
+        if (!wordId) return;
+
+        // 如果没有默认单词本ID，尝试重新获取
+        let targetNotebookId = defaultNotebookId;
+        if (!targetNotebookId) {
+            try {
+                const nb = await notebookApi.getDefault();
+                targetNotebookId = nb.id;
+                setDefaultNotebookId(nb.id);
+            } catch (error: any) {
+                console.error('获取默认单词本失败:', error);
+                const status = error.response?.status;
+                const message = error.response?.data?.message || error.message;
+                setToast({ message: `获取默认单词本失败 (${status}): ${message}`, type: 'error' });
+                return;
+            }
+        }
+
         setIsLoading(true);
         try {
             if (isCollected) {
-                // 取消收藏
-                await notebookApi.removeWord(defaultNotebookId, wordId);
+                // 取消收藏：移除单词本，后端会自动删除闪卡
+                await notebookApi.removeWord(targetNotebookId, wordId);
                 setIsCollected(false);
-                setToast({ message: '收藏已取消', type: 'info' });
+                setToast({ message: '已取消收藏并移除闪卡', type: 'info' });
             } else {
-                // 加入收藏
-                await notebookApi.addWord(defaultNotebookId, wordId);
+                // 收藏：加入单词本，后端会自动创建闪卡
+                await notebookApi.addWord(targetNotebookId, wordId);
                 setIsCollected(true);
-                setToast({ message: '已加入收藏', type: 'success' });
+                setToast({ message: '已收藏并加入闪卡', type: 'success' });
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('操作失败:', error);
-            setToast({ message: '操作失败', type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleFlashcard = async () => {
-        if (!wordId) return;
-        setIsLoading(true);
-        try {
-            if (isInFlashcard) {
-                // 移除闪卡 (Step 5)
-                if (flashcardId) {
-                    await flashcardApi.delete(flashcardId);
-                    setIsInFlashcard(false);
-                    setFlashcardId(null);
-                    setToast({ message: '已从闪卡移除', type: 'info' });
-                }
+            // 如果是重复添加错误，也算成功
+            if (error.response?.status === 409) {
+                setIsCollected(true);
+                setToast({ message: '该单词已在收藏中', type: 'info' });
             } else {
-                // 加入闪卡
-                const newCard = await flashcardApi.create(wordId);
-                setIsInFlashcard(true);
-                setFlashcardId(newCard.id);
-                setToast({ message: '已加入闪卡', type: 'success' });
+                setToast({ message: '操作失败，请稍后重试', type: 'error' });
             }
-        } catch (error) {
-            console.error('操作失败:', error);
-            setToast({ message: '操作失败', type: 'error' });
         } finally {
             setIsLoading(false);
         }
@@ -156,30 +149,19 @@ export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phonet
                     </div>
                 </div>
 
-                {/* 按钮组 */}
+                {/* 收藏按钮（收藏 = 收藏 + 闪卡） */}
                 <div className="flex gap-3">
                     <button
                         onClick={handleCollect}
                         disabled={isLoading}
-                        className={`px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-2 ${isCollected
-                                ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200'
-                                : 'bg-white/50 text-gray-600 hover:bg-white/80'
+                        className={`px-5 py-3 rounded-xl transition-all shadow-md flex items-center gap-2 font-medium ${isCollected
+                            ? 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white hover:from-yellow-500 hover:to-orange-500'
+                            : 'bg-white/60 text-gray-700 hover:bg-white/90'
                             }`}
-                        title={isCollected ? "取消收藏" : "加入收藏"}
+                        title={isCollected ? "取消收藏（同时移除闪卡）" : "收藏（同时加入闪卡）"}
                     >
-                        <span>{isCollected ? '⭐ 已收藏' : '⭐ 收藏'}</span>
-                    </button>
-
-                    <button
-                        onClick={handleFlashcard}
-                        disabled={isLoading}
-                        className={`px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-2 ${isInFlashcard
-                                ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                                : 'bg-pink-500 text-white hover:bg-pink-600'
-                            }`}
-                        title={isInFlashcard ? "移除闪卡" : "加入闪卡"}
-                    >
-                        <span>{isInFlashcard ? '🃏 已加入' : '🃏 加入闪卡'}</span>
+                        <StarIcon filled={isCollected} className="w-5 h-5" />
+                        <span>{isCollected ? '已收藏' : '收藏'}</span>
                     </button>
                 </div>
             </div>
@@ -188,3 +170,4 @@ export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phonet
 };
 
 export default WordHeader;
+

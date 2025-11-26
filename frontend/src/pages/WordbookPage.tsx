@@ -1,160 +1,150 @@
 import { useState, useEffect } from 'react';
-import { NotebookList } from '../components/NotebookList';
-import { NotebookDetail } from '../components/NotebookDetail';
-import { CreateNotebookDialog } from '../components/CreateNotebookDialog';
-import { GeneratedArticle } from '../components/GeneratedArticle';
-import { notebookApi, Notebook, NotebookDetail as NotebookDetailType, ArticleDetail } from '../utils/notebookApi';
+import { useNavigate } from 'react-router-dom';
+import { notebookApi, NotebookWord } from '../utils/notebookApi';
 
+/**
+ * 单词本页面 - 显示所有收藏的单词
+ * 直接显示默认单词本的内容（收藏列表）
+ */
 function WordbookPage() {
-    const [notebooks, setNotebooks] = useState<Notebook[]>([]);
-    const [selectedId, setSelectedId] = useState<number | null>(null);
-    const [currentDetail, setCurrentDetail] = useState<NotebookDetailType | null>(null);
-    const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-    const [generatedArticle, setGeneratedArticle] = useState<ArticleDetail | null>(null);
+    const navigate = useNavigate();
+    const [words, setWords] = useState<(NotebookWord & { definition?: string })[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isGenerating, setIsGenerating] = useState(false);
+    const [notebookId, setNotebookId] = useState<number | null>(null);
 
-    // 加载单词本列表
-    const loadNotebooks = async () => {
-        try {
-            const list = await notebookApi.getAll();
-            setNotebooks(list);
-            // 如果没有选中项且列表不为空，默认选中第一个（通常是默认单词本）
-            if (!selectedId && list.length > 0) {
-                setSelectedId(list[0].id);
-            }
-        } catch (error) {
-            console.error('加载单词本失败:', error);
-        }
-    };
-
-    // 加载单词本详情
-    const loadDetail = async (id: number) => {
+    // 加载默认单词本的单词列表
+    const loadWords = async () => {
         setIsLoading(true);
         try {
-            const detail = await notebookApi.getDetail(id);
-            setCurrentDetail(detail);
-            setGeneratedArticle(null); // 切换单词本时清空文章
+            // 获取默认单词本
+            const notebook = await notebookApi.getDefault();
+            setNotebookId(notebook.id);
+
+            // 获取单词详情
+            const detail = await notebookApi.getDetail(notebook.id);
+            setWords(detail.words);
         } catch (error) {
-            console.error('加载详情失败:', error);
+            console.error('加载收藏单词失败:', error);
         } finally {
             setIsLoading(false);
         }
     };
 
-    // 初始化加载
     useEffect(() => {
-        loadNotebooks();
+        loadWords();
     }, []);
 
-    // 监听选中变化
-    useEffect(() => {
-        if (selectedId) {
-            loadDetail(selectedId);
-        }
-    }, [selectedId]);
-
-    // 创建单词本
-    const handleCreateNotebook = async (name: string, description: string) => {
-        try {
-            await notebookApi.create(name, description);
-            await loadNotebooks(); // 刷新列表
-        } catch (error) {
-            console.error('创建单词本失败:', error);
-            alert('创建失败，请重试');
-        }
-    };
-
-    // 移除单词
+    // 移除单词（取消收藏）
     const handleRemoveWord = async (wordId: number) => {
-        if (!selectedId) return;
+        if (!notebookId) return;
         try {
-            await notebookApi.removeWord(selectedId, wordId);
-            // 刷新详情
-            await loadDetail(selectedId);
-            // 刷新列表（更新计数）
-            loadNotebooks();
+            await notebookApi.removeWord(notebookId, wordId);
+            // 刷新列表
+            await loadWords();
         } catch (error) {
             console.error('移除单词失败:', error);
-            alert('移除失败，请重试');
         }
     };
 
-    // 生成文章
-    const handleGenerateArticle = async () => {
-        if (!selectedId) return;
-        setIsGenerating(true);
-        try {
-            const article = await notebookApi.generateArticle(selectedId);
-            setGeneratedArticle(article);
-        } catch (error) {
-            console.error('生成文章失败:', error);
-            alert('生成文章失败，请重试');
-        } finally {
-            setIsGenerating(false);
-        }
+    // 点击单词跳转到查词页
+    const handleWordClick = (word: string) => {
+        navigate(`/search?q=${word}`);
+    };
+
+    // 格式化日期
+    const formatDate = (dateString: string) => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) return '今天';
+        if (diffDays === 1) return '昨天';
+        if (diffDays < 7) return `${diffDays}天前`;
+        return date.toLocaleDateString('zh-CN');
     };
 
     return (
-        <div className="max-w-6xl mx-auto h-[calc(100vh-140px)] flex gap-6">
-            {/* 左侧列表区域 */}
-            <div className="w-1/3 flex flex-col bg-white/30 backdrop-blur-md rounded-2xl border border-white/40 shadow-xl overflow-hidden">
-                <div className="p-4 border-b border-white/20 flex justify-between items-center bg-white/20">
-                    <h2 className="font-bold text-gray-800 text-lg">我的单词本</h2>
+        <div className="max-w-4xl mx-auto">
+            {/* 页面标题 */}
+            <div className="mb-6">
+                <h1 className="text-3xl font-semibold text-gray-800 tracking-wider">我的单词本</h1>
+                <p className="text-gray-600 mt-2">已收藏 {words.length} 个单词</p>
+            </div>
+
+            {/* 加载状态 */}
+            {isLoading && (
+                <div className="bg-white/40 backdrop-blur-sm rounded-3xl shadow-xl p-12 text-center">
+                    <div className="animate-spin w-12 h-12 border-4 border-blue-400 border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-gray-600">加载中...</p>
+                </div>
+            )}
+
+            {/* 单词列表 */}
+            {!isLoading && words.length > 0 && (
+                <div className="space-y-3">
+                    {words.map((word) => (
+                        <div
+                            key={word.wordId}
+                            className="bg-white/40 backdrop-blur-sm rounded-2xl p-5 border border-white/50 shadow-md hover:shadow-lg transition-all group"
+                        >
+                            <div className="flex items-center justify-between">
+                                {/* 左侧：单词信息 - 点击可跳转 */}
+                                <div
+                                    onClick={() => handleWordClick(word.spelling)}
+                                    className="flex-1 cursor-pointer"
+                                >
+                                    <div className="flex items-baseline gap-3 mb-1">
+                                        <h3 className="text-xl font-semibold text-gray-800 group-hover:text-blue-600 transition-colors">
+                                            {word.spelling}
+                                        </h3>
+                                        {word.phoneticUk && (
+                                            <span className="text-sm text-gray-500 font-mono">
+                                                /{word.phoneticUk}/
+                                            </span>
+                                        )}
+                                    </div>
+                                    {word.definition && (
+                                        <p className="text-gray-600 text-sm line-clamp-2">
+                                            {word.definition}
+                                        </p>
+                                    )}
+                                    <p className="text-gray-400 text-xs mt-1">
+                                        收藏于 {formatDate(word.addedAt)}
+                                    </p>
+                                </div>
+
+                                {/* 右侧：删除按钮 */}
+                                <button
+                                    onClick={() => handleRemoveWord(word.wordId)}
+                                    className="ml-4 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="移除收藏"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* 空状态 */}
+            {!isLoading && words.length === 0 && (
+                <div className="bg-white/40 backdrop-blur-sm rounded-3xl shadow-xl p-16 text-center">
+                    <div className="text-6xl mb-4">📚</div>
+                    <h3 className="text-2xl font-semibold text-gray-800 mb-3">你还没有收藏任何单词~</h3>
+                    <p className="text-gray-600 mb-6">
+                        去查词页面试着收藏一个吧！
+                    </p>
                     <button
-                        onClick={() => setIsCreateDialogOpen(true)}
-                        className="p-2 bg-white/50 hover:bg-white/80 rounded-lg transition-colors text-blue-600"
-                        title="新建单词本"
+                        onClick={() => navigate('/search')}
+                        className="px-8 py-3 bg-gradient-to-r from-blue-400 to-indigo-400 text-white rounded-full hover:from-blue-500 hover:to-indigo-500 transition-all shadow-md font-medium"
                     >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
+                        开始查词
                     </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                    <NotebookList
-                        notebooks={notebooks}
-                        selectedId={selectedId}
-                        onSelect={setSelectedId}
-                    />
-                </div>
-            </div>
-
-            {/* 右侧详情区域 */}
-            <div className="w-2/3 flex flex-col bg-white/30 backdrop-blur-md rounded-2xl border border-white/40 shadow-xl overflow-hidden relative">
-                {isLoading ? (
-                    <div className="flex-1 flex items-center justify-center text-gray-500">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mr-2"></div>
-                        加载中...
-                    </div>
-                ) : currentDetail ? (
-                    <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-                        <NotebookDetail
-                            detail={currentDetail}
-                            onRemoveWord={handleRemoveWord}
-                            onGenerateArticle={handleGenerateArticle}
-                            isGenerating={isGenerating}
-                        />
-                        {generatedArticle && (
-                            <GeneratedArticle
-                                title={generatedArticle.title}
-                                content={generatedArticle.content}
-                                onClose={() => setGeneratedArticle(null)}
-                            />
-                        )}
-                    </div>
-                ) : (
-                    <div className="flex-1 flex items-center justify-center text-gray-400">
-                        选择一个单词本查看详情
-                    </div>
-                )}
-            </div>
-
-            <CreateNotebookDialog
-                isOpen={isCreateDialogOpen}
-                onClose={() => setIsCreateDialogOpen(false)}
-                onSubmit={handleCreateNotebook}
-            />
+            )}
         </div>
     );
 }

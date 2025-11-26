@@ -34,6 +34,6 @@ export class AuthController {
     @Get('me')
     async getCurrentUser(@Request() req) {
         // req.user 由 JWT 策略注入
-        return this.authService.getCurrentUser(req.user.userId);
+        return this.authService.getCurrentUser(req.user.id);
     }
 }

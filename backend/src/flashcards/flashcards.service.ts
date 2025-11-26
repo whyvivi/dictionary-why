@@ -67,6 +67,27 @@ export class FlashcardsService {
     }
 
     /**
+     * 根据 wordId 删除闪卡（供收藏取消时调用）
+     */
+    async deleteByWordId(userId: number, wordId: number) {
+        const flashcard = await this.prisma.flashcard.findFirst({
+            where: {
+                userId,
+                wordId,
+            },
+        });
+
+        if (!flashcard) {
+            // 不存在就不删除，静默返回
+            return { message: '闪卡不存在或已删除' };
+        }
+
+        return this.prisma.flashcard.delete({
+            where: { id: flashcard.id },
+        });
+    }
+
+    /**
      * 获取所有闪卡（列表模式）
      */
     async getAllFlashcards(userId: number) {
@@ -89,6 +110,64 @@ export class FlashcardsService {
             status: fc.status,
             proficiency: fc.proficiency,
             nextReviewDate: fc.nextReviewDate,
+        }));
+    }
+
+    /**
+     * 获取今日需要复习的闪卡
+     * 返回 nextReviewDate <= 今天结束时间的所有闪卡
+     */
+    async getTodayFlashcards(userId: number) {
+        // 获取今天结束时间（23:59:59）
+        const endOfToday = new Date();
+        endOfToday.setHours(23, 59, 59, 999);
+
+        const flashcards = await this.prisma.flashcard.findMany({
+            where: {
+                userId,
+                nextReviewDate: {
+                    lte: endOfToday,
+                },
+            },
+            include: {
+                word: {
+                    include: {
+                        senses: {
+                            include: {
+                                examples: true,
+                            },
+                            orderBy: {
+                                senseOrder: 'asc',
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: [
+                { nextReviewDate: 'asc' },
+                { proficiency: 'asc' },
+            ],
+        });
+
+        // 转换为前端友好格式
+        return flashcards.map(fc => ({
+            id: fc.id,
+            wordId: fc.wordId,
+            spelling: fc.word.spelling,
+            phoneticUk: fc.word.phoneticUk,
+            phoneticUs: fc.word.phoneticUs,
+            status: fc.status,
+            proficiency: fc.proficiency,
+            nextReviewDate: fc.nextReviewDate,
+            senses: fc.word.senses.map(s => ({
+                partOfSpeech: s.partOfSpeech,
+                definitionEn: s.definitionEn,
+                definitionZh: s.definitionZh,
+                examples: s.examples.map(e => ({
+                    sentenceEn: e.sentenceEn,
+                    sentenceZh: e.sentenceZh,
+                })),
+            })),
         }));
     }
 

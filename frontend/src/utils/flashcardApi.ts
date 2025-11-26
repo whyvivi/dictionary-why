@@ -33,6 +33,12 @@ export const flashcardApi = {
         return response.data;
     },
 
+    // 获取今日需要复习的闪卡
+    getTodayFlashcards: async (): Promise<Flashcard[]> => {
+        const response = await api.get('/flashcards/today');
+        return response.data;
+    },
+
     // 获取复习列表
     getReviewList: async (mode: 'recent' | 'notebook' = 'recent', notebookId?: number): Promise<Flashcard[]> => {
         const params: any = { mode };

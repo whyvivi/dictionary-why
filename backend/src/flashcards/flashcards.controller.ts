@@ -25,6 +25,14 @@ export class FlashcardsController {
     }
 
     /**
+     * 获取今日需要复习的闪卡
+     */
+    @Get('today')
+    async getTodayFlashcards(@Request() req) {
+        return this.flashcardsService.getTodayFlashcards(req.user.id);
+    }
+
+    /**
      * 获取复习闪卡列表
      */
     @Get()

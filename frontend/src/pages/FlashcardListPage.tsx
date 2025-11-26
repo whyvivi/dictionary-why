@@ -18,9 +18,11 @@ function FlashcardListPage() {
         try {
             const list = await flashcardApi.getAll();
             setFlashcards(list);
-        } catch (error) {
+        } catch (error: any) {
             console.error('加载闪卡失败:', error);
-            setToast({ message: '加载失败', type: 'error' });
+            const status = error.response?.status;
+            const message = error.response?.data?.message || error.message;
+            setToast({ message: `加载闪卡失败 (${status}): ${message}`, type: 'error' });
         } finally {
             setIsLoading(false);
         }
@@ -34,9 +36,11 @@ function FlashcardListPage() {
             await flashcardApi.delete(id);
             setFlashcards(prev => prev.filter(fc => fc.id !== id));
             setToast({ message: '已移除闪卡', type: 'success' });
-        } catch (error) {
+        } catch (error: any) {
             console.error('删除失败:', error);
-            setToast({ message: '删除失败', type: 'error' });
+            const status = error.response?.status;
+            const message = error.response?.data?.message || error.message;
+            setToast({ message: `删除失败 (${status}): ${message}`, type: 'error' });
         }
     };
 
@@ -75,17 +79,17 @@ function FlashcardListPage() {
             )}
 
             {/* 顶部标题栏 */}
-            <div className="flex justify-between items-center mb-8 px-4">
+            <div className="flex justify-between items-center mb-8">
                 <div>
-                    <h2 className="text-3xl font-bold text-gray-800">我的闪卡</h2>
-                    <p className="text-gray-500 mt-1">共 {flashcards.length} 张卡片正在学习中</p>
+                    <h2 className="text-3xl font-semibold text-gray-800 tracking-wider">我的闪卡</h2>
+                    <p className="text-gray-600 mt-1">共 {flashcards.length} 张卡片</p>
                 </div>
                 <button
                     onClick={() => navigate('/flashcards/review')}
-                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center gap-2"
+                    className="px-8 py-3 bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 text-white rounded-full font-medium shadow-lg hover:shadow-xl hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 transition-all flex items-center gap-2"
                 >
-                    <span>▶️</span>
-                    开始复习
+                    <span>▶</span>
+                    开始今日复习
                 </button>
             </div>
 

@@ -3,7 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotebooksService } from './notebooks.service';
 import { CreateNotebookDto, AddWordDto } from './dto/notebook.dto';
 
-@Controller('api/notebooks')
+@Controller('notebooks')
 @UseGuards(JwtAuthGuard)
 export class NotebooksController {
     constructor(private readonly notebooksService: NotebooksService) { }
@@ -29,6 +29,7 @@ export class NotebooksController {
      */
     @Post('default')
     async getDefaultNotebook(@Request() req) {
+        console.log('收到获取默认单词本请求, userId:', req.user.id);
         return this.notebooksService.getDefaultNotebook(req.user.id);
     }
 
