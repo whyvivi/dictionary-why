@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "flashcards" ADD COLUMN     "next_review_date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "proficiency" INTEGER NOT NULL DEFAULT 0;
