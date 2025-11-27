@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Param, UseGuards, Request, ParseIntPipe } 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ArticlesService } from './articles.service';
 import { GenerateArticleDto } from './dto/article.dto';
+import { GenerateArticleFromWordsDto } from './dto/generate-article-from-words.dto';
 
 @Controller('articles')
 @UseGuards(JwtAuthGuard)
@@ -14,6 +15,14 @@ export class ArticlesController {
     @Post('generate')
     async generateArticle(@Request() req, @Body() dto: GenerateArticleDto) {
         return this.articlesService.generateArticle(req.user.id, dto);
+    }
+
+    /**
+     * 根据单词列表生成文章（不写数据库，内存缓存）
+     */
+    @Post('generate-from-words')
+    async generateFromWords(@Request() req, @Body() dto: GenerateArticleFromWordsDto) {
+        return this.articlesService.generateArticleFromWords(req.user.id, dto.words, dto.level);
     }
 
     /**
