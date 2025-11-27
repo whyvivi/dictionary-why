@@ -1,0 +1,22 @@
+启动后端
+在后端的路径下执行：
+npm run dev
+启动前端
+在前端的路径下执行：
+npm run dev
+
+提交到GitHub
+选中根目录
+git add .    ##勾选改动文件
+git commit -m "更新内容"     ###在本地说明修改的文件
+git push   ##推送到GitHub上
+
+
+方案 1：启动 PostgreSQL 服务（推荐）
+操作步骤：
+
+以管理员身份打开(Win+X) PowerShell
+运行命令：
+Start-Service postgresql-x64-18
+验证服务状态：
+Get-Service postgresql-x64-18

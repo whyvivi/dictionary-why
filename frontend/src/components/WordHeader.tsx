@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { notebookApi } from '../utils/notebookApi';
 
 import { Toast } from './Toast';
@@ -36,7 +36,7 @@ export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phonet
             const foundInNotebook = detail.words.some(w => w.wordId === wordId);
             setIsCollected(foundInNotebook);
         } catch (error) {
-            console.error('检查收藏状态失败:', error);
+            console.error('检查收藏状态失败', error);
         }
     };
 
@@ -59,7 +59,7 @@ export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phonet
     const handleCollect = async () => {
         if (!wordId) return;
 
-        // 如果没有默认单词本ID，尝试重新获取
+        // 如果没有默认单词本 ID，尝试重新获取
         let targetNotebookId = defaultNotebookId;
         if (!targetNotebookId) {
             try {
@@ -67,10 +67,10 @@ export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phonet
                 targetNotebookId = nb.id;
                 setDefaultNotebookId(nb.id);
             } catch (error: any) {
-                console.error('获取默认单词本失败:', error);
+                console.error('获取默认单词本失败', error);
                 const status = error.response?.status;
                 const message = error.response?.data?.message || error.message;
-                setToast({ message: `获取默认单词本失败 (${status}): ${message}`, type: 'error' });
+                setToast({ message: `获取默认单词本失败(${status}): ${message}`, type: 'error' });
                 return;
             }
         }
@@ -170,4 +170,3 @@ export const WordHeader: React.FC<WordHeaderProps> = ({ word, phoneticUk, phonet
 };
 
 export default WordHeader;
-

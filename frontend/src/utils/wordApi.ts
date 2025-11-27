@@ -3,27 +3,35 @@ import api from './api';
 /**
  * 单词详情接口返回类型
  */
+/**
+ * 单词详情接口返回类型 (对应后端的 UnifiedWordDetailDto)
+ */
 export interface WordDetail {
     id: number;
-    spelling: string;
-    phoneticUk?: string;
-    phoneticUs?: string;
-    audioUkUrl?: string;
-    audioUsUrl?: string;
+    word: string;
+    phonetic: {
+        uk?: string | null;
+        ukAudio?: string | null;
+        us?: string | null;
+        usAudio?: string | null;
+        general?: string | null;
+    };
     senses: WordSense[];
+    source?: string;
+    cached?: boolean;
 }
 
 export interface WordSense {
-    senseOrder: number;
-    partOfSpeech: string;
-    definitionEn: string;
-    definitionZh?: string;
+    id: number;
+    pos: string;
+    cn: string;
+    enDefinition?: string | null;
     examples: Example[];
 }
 
 export interface Example {
-    sentenceEn?: string;
-    sentenceZh?: string;
+    en: string;
+    cn: string;
 }
 
 export interface WordSearchResult {

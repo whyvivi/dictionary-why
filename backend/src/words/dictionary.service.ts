@@ -1,58 +1,224 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { WordDetailDto, WordSenseDto, ExampleDto } from './dto/word.dto';
+import { WordDetailDto, UnifiedWordDetailDto } from './dto/word.dto';
+import { SiliconFlowProvider, CompleteWordInfo } from '../llm/siliconflow.provider';
 
 /**
  * 字典服务
- * 封装免费字典 API 调用和本地缓存逻辑
+ * 负责处理单词查询的完整业务逻辑
  * 
- * 注意:当前使用 https://api.dictionaryapi.dev 免费 API 仅作开发/演示用途
- * 将来需要替换为正式授权的词典 API 或导入本地词典数据
+ * 核心流程（LLM 优先）：
+ * 1. 优先从数据库查询（如果有完整数据则直接返回）
+ * 2. 如果没有或数据不完整，直接调用 LLM 生成完整的单词信息（音标、释义、例句）
+ * 3. 将完整数据保存到数据库
+ * 4. 返回统一格式的 DTO
  */
 @Injectable()
 export class DictionaryService {
     private readonly logger = new Logger(DictionaryService.name);
-    // 免费字典 API 地址(仅用于开发和演示)
-    private readonly FREE_DICT_API = 'https://api.dictionaryapi.dev/api/v2/entries/en';
 
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private siliconFlowProvider: SiliconFlowProvider,
+    ) { }
 
     /**
-     * 获取单词详情
-     * 优先从本地数据库查询,如果没有则调用外部 API 并缓存
+     * 获取单词详情（统一返回格式）
+     * 这是对外暴露的主要接口，返回统一的 DTO 格式
+     * 
      * @param spelling 单词拼写
-     * @returns 单词详情 DTO
+     * @returns 统一格式的单词详情 DTO
      */
-    async getWordDetail(spelling: string): Promise<WordDetailDto> {
-        // 1. 将输入转换为小写,去掉首尾空格
+    async getWordDetail(spelling: string): Promise<UnifiedWordDetailDto> {
+        // 步骤 1：标准化输入
         const normalizedSpelling = spelling.trim().toLowerCase();
 
-        // 2. 先查询本地数据库
-        const cachedWord = await this.findWordInDatabase(normalizedSpelling);
-        if (cachedWord) {
-            this.logger.log(`从本地缓存获取单词: ${normalizedSpelling}`);
-            return cachedWord;
+        this.logger.log(`收到查询请求: ${normalizedSpelling}`);
+        // 检查 API Key 是否配置
+        if (!process.env.SILICONFLOW_API_KEY) {
+            this.logger.error('严重错误: SILICONFLOW_API_KEY 环境变量未配置！');
+        } else {
+            this.logger.log('SILICONFLOW_API_KEY 已配置');
         }
 
-        // 3. 本地没有,调用免费字典 API
-        this.logger.log(`本地缓存未找到,调用外部 API 查询: ${normalizedSpelling}`);
+        // 步骤 2：优先从数据库查询
+        const cachedWord = await this.findWordInDatabase(normalizedSpelling);
+        if (cachedWord) {
+            // 检查是否有完整的中文释义和例句
+            const hasCompleteData = this.checkIfDataIsComplete(cachedWord);
+
+            if (hasCompleteData) {
+                this.logger.log(`从本地缓存获取单词（完整数据）: ${normalizedSpelling}`);
+                return this.convertToUnifiedDto(cachedWord, true);
+            }
+        }
+
+        // 步骤 3：数据库没有该单词或数据不完整，直接调用 LLM 生成完整信息
+        this.logger.log(`本地缓存未找到或数据不完整，调用 LLM 生成完整信息: ${normalizedSpelling}`);
         try {
-            const apiResult = await this.fetchFromFreeApi(normalizedSpelling);
+            // 调用 LLM 生成完整单词信息（包括音标、词性、释义、例句）
+            const llmWordInfo = await this.siliconFlowProvider.generateCompleteWordInfo(normalizedSpelling);
 
-            // 4. 将 API 结果写入本地数据库
-            const savedWord = await this.saveWordToDatabase(normalizedSpelling, apiResult);
+            // 将 LLM 生成的信息保存到数据库
+            await this.saveLLMWordToDatabase(llmWordInfo);
 
-            return savedWord;
-        } catch (error) {
+            // 重新查询以获取最新数据
+            const finalWord = await this.findWordInDatabase(normalizedSpelling);
+            if (!finalWord) {
+                throw new Error('保存单词后查询失败');
+            }
+            return this.convertToUnifiedDto(finalWord, false);
+
+        } catch (error: any) {
             this.logger.error(`查询单词失败: ${normalizedSpelling}`, error.stack);
-            throw new Error(`未找到单词: ${normalizedSpelling}`);
+
+            // 处理未找到的情况
+            if (error.message === 'Word not found') {
+                throw new Error('请仔细检查单词拼写');
+            }
+
+            // 临时：写入错误日志到文件
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                const fs = require('fs');
+                const logMessage = `${new Date().toISOString()} - Error querying ${normalizedSpelling}: ${error.message}\nStack: ${error.stack}\n\n`;
+                fs.appendFileSync('error.log', logMessage);
+            } catch (e) {
+                console.error('无法写入错误日志文件', e);
+            }
+            throw new Error(`查询单词失败: ${normalizedSpelling}。错误: ${error.message}`);
         }
     }
 
     /**
-     * 从本地数据库查询单词
-     * @param spelling 单词拼写(已标准化)
-     * @returns 单词详情 DTO 或 null
+     * 检查数据库中的单词数据是否完整
+     * 完整的定义：每个词义都有中文释义，并且至少有一个例句
+     */
+    private checkIfDataIsComplete(wordDetail: WordDetailDto): boolean {
+        if (!wordDetail.senses || wordDetail.senses.length === 0) {
+            return false;
+        }
+
+        // 检查每个词义是否都有中文释义和例句
+        return wordDetail.senses.every(sense => {
+            return sense.definitionZh && sense.examples && sense.examples.length > 0;
+        });
+    }
+
+    /**
+     * 将内部 DTO 转换为统一的对外 DTO 格式
+     */
+    private convertToUnifiedDto(wordDetail: WordDetailDto, cached: boolean): UnifiedWordDetailDto {
+        return {
+            id: wordDetail.id,
+            word: wordDetail.spelling,
+            phonetic: {
+                uk: wordDetail.phoneticUk || null,
+                ukAudio: wordDetail.audioUkUrl || null,
+                us: wordDetail.phoneticUs || null,
+                usAudio: wordDetail.audioUsUrl || null,
+                general: null,
+            },
+            senses: wordDetail.senses.map(sense => ({
+                id: sense.senseOrder, // 使用 senseOrder 作为前端展示的 ID
+                pos: this.formatPartOfSpeech(sense.partOfSpeech),
+                cn: sense.definitionZh || sense.definitionEn || '', // 优先使用中文
+                enDefinition: sense.definitionEn || null,
+                examples: sense.examples.map(ex => ({
+                    en: ex.sentenceEn || '',
+                    cn: ex.sentenceZh || '',
+                })),
+            })),
+            source: 'dictionary+llm',
+            cached,
+        };
+    }
+
+    /**
+     * 格式化词性
+     */
+    private formatPartOfSpeech(partOfSpeech: string): string {
+        const posMap: Record<string, string> = {
+            'noun': 'n.',
+            'verb': 'v.',
+            'adjective': 'adj.',
+            'adverb': 'adv.',
+            'pronoun': 'pron.',
+            'preposition': 'prep.',
+            'conjunction': 'conj.',
+            'interjection': 'interj.',
+        };
+        return posMap[partOfSpeech.toLowerCase()] || partOfSpeech;
+    }
+
+    /**
+     * 将 LLM 生成的完整单词信息保存到数据库
+     * 
+     * @param wordInfo LLM 生成的完整单词信息
+     */
+    private async saveLLMWordToDatabase(wordInfo: CompleteWordInfo): Promise<void> {
+        await this.prisma.$transaction(async (prisma) => {
+            // 1. 检查单词是否已存在
+            let word = await prisma.word.findUnique({
+                where: { spelling: wordInfo.word },
+            });
+
+            if (word) {
+                // 更新现有单词的音标
+                word = await prisma.word.update({
+                    where: { id: word.id },
+                    data: {
+                        phoneticUk: wordInfo.phonetic.uk,
+                        phoneticUs: wordInfo.phonetic.us,
+                    },
+                });
+                // 删除旧的词义，重新覆盖（简单策略）
+                await prisma.wordSense.deleteMany({
+                    where: { wordId: word.id },
+                });
+            } else {
+                // 创建新单词
+                word = await prisma.word.create({
+                    data: {
+                        spelling: wordInfo.word,
+                        phoneticUk: wordInfo.phonetic.uk,
+                        phoneticUs: wordInfo.phonetic.us,
+                    },
+                });
+            }
+
+            // 2. 创建词义和例句
+            let senseOrder = 1;
+            for (const sense of wordInfo.senses) {
+                const wordSense = await prisma.wordSense.create({
+                    data: {
+                        wordId: word.id,
+                        senseOrder,
+                        partOfSpeech: sense.pos,
+                        definitionZh: sense.cn,
+                        definitionEn: sense.enDefinition,
+                    },
+                });
+
+                // 保存例句
+                for (const example of sense.examples) {
+                    await prisma.example.create({
+                        data: {
+                            senseId: wordSense.id,
+                            sentenceEn: example.en,
+                            sentenceZh: example.cn,
+                        },
+                    });
+                }
+                senseOrder++;
+            }
+        });
+
+        this.logger.log(`已保存单词 "${wordInfo.word}" 到数据库`);
+    }
+
+    /**
+     * 从数据库查询单词
      */
     private async findWordInDatabase(spelling: string): Promise<WordDetailDto | null> {
         const word = await this.prisma.word.findUnique({
@@ -95,132 +261,7 @@ export class DictionaryService {
     }
 
     /**
-     * 调用免费字典 API 获取单词信息
-     * @param spelling 单词拼写
-     * @returns API 返回的原始数据
-     */
-    private async fetchFromFreeApi(spelling: string): Promise<any> {
-        const url = `${this.FREE_DICT_API}/${spelling}`;
-
-        try {
-            const response = await fetch(url);
-
-            if (!response.ok) {
-                throw new Error(`API 返回错误状态: ${response.status}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            this.logger.error(`调用免费字典 API 失败: ${url}`, error.stack);
-            throw error;
-        }
-    }
-
-    /**
-     * 将 API 返回的数据保存到本地数据库
-     * @param spelling 单词拼写
-     * @param apiData API 返回的原始数据
-     * @returns 保存后的单词详情 DTO
-     */
-    private async saveWordToDatabase(spelling: string, apiData: any[]): Promise<WordDetailDto> {
-        // 解析 API 返回的第一个结果
-        const firstResult = apiData[0];
-        if (!firstResult) {
-            throw new Error('API 返回数据为空');
-        }
-
-        // 提取音标信息
-        const phonetics = firstResult.phonetics || [];
-        let phoneticUk = null;
-        let phoneticUs = null;
-        let audioUkUrl = null;
-        let audioUsUrl = null;
-
-        // 尝试找到英式和美式音标
-        for (const p of phonetics) {
-            if (p.text) {
-                // 简单判断:如果有 audio 且包含 'uk',认为是英式
-                if (p.audio && p.audio.includes('uk')) {
-                    phoneticUk = p.text;
-                    audioUkUrl = p.audio;
-                } else if (p.audio && p.audio.includes('us')) {
-                    phoneticUs = p.text;
-                    audioUsUrl = p.audio;
-                } else if (!phoneticUk) {
-                    // 如果没有明确标识,第一个作为英式
-                    phoneticUk = p.text;
-                    audioUkUrl = p.audio || null;
-                }
-            }
-        }
-
-        // 如果只有一个音标,同时用作英式和美式
-        if (phoneticUk && !phoneticUs) {
-            phoneticUs = phoneticUk;
-            audioUsUrl = audioUkUrl;
-        }
-
-        // 使用事务创建单词及其关联数据
-        const savedWord = await this.prisma.$transaction(async (prisma) => {
-            // 1. 创建单词
-            const word = await prisma.word.create({
-                data: {
-                    spelling,
-                    phoneticUk,
-                    phoneticUs,
-                    audioUkUrl,
-                    audioUsUrl,
-                },
-            });
-
-            // 2. 创建义项和例句
-            const meanings = firstResult.meanings || [];
-            let senseOrder = 1;
-
-            for (const meaning of meanings) {
-                const partOfSpeech = meaning.partOfSpeech || 'unknown';
-                const definitions = meaning.definitions || [];
-
-                for (const def of definitions) {
-                    const definitionEn = def.definition;
-
-                    // 创建义项记录
-                    const sense = await prisma.wordSense.create({
-                        data: {
-                            wordId: word.id,
-                            senseOrder,
-                            partOfSpeech,
-                            definitionEn,
-                            definitionZh: null, // 当前阶段中文释义为空
-                        },
-                    });
-
-                    // 保存例句（如果有）
-                    if (def.example) {
-                        await prisma.example.create({
-                            data: {
-                                senseId: sense.id,
-                                sentenceEn: def.example,
-                                sentenceZh: null,
-                            },
-                        });
-                    }
-                    senseOrder++;
-                }
-            }
-            return word;
-        });
-
-        // 重新查询以返回完整结构
-        return this.findWordInDatabase(savedWord.spelling);
-    }
-
-    /**
-     * 搜索单词(前缀匹配)
-     * @param query 搜索关键词
-     * @param limit 返回数量限制
-     * @returns 匹配的单词列表
+     * 搜索单词（前缀匹配）
      */
     async searchWords(query: string, limit: number = 20): Promise<{ id: number; spelling: string }[]> {
         const normalizedQuery = query.trim().toLowerCase();

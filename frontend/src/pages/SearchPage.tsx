@@ -46,7 +46,9 @@ function SearchPage() {
             } else if (err.response?.status === 401) {
                 setError('登录已过期,请重新登录');
             } else {
-                setError('查询失败,请稍后重试');
+                // 显示具体的错误信息
+                const errorMessage = err.response?.data?.message || err.message || '查询失败,请稍后重试';
+                setError(`查询失败: ${errorMessage}`);
             }
         } finally {
             setIsLoading(false);
@@ -65,6 +67,7 @@ function SearchPage() {
                 <div className="glass-strong rounded-3xl shadow-glass p-12 text-center">
                     <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
                     <p className="text-gray-600 text-lg">正在查询中...</p>
+                    <p className="text-gray-400 text-sm mt-2">首次查询需要 AI 生成完整释义，可能需要 10-20 秒，请耐心等待</p>
                 </div>
             )}
 
@@ -84,12 +87,13 @@ function SearchPage() {
             {wordDetail && !isLoading && !error && (
                 <div className="space-y-6 animate-fade-in-up">
                     {/* 单词头部信息 */}
+                    {/* 单词头部信息 */}
                     <WordHeader
-                        word={wordDetail.spelling}
-                        phoneticUk={wordDetail.phoneticUk}
-                        phoneticUs={wordDetail.phoneticUs}
-                        audioUk={wordDetail.audioUkUrl}
-                        audioUs={wordDetail.audioUsUrl}
+                        word={wordDetail.word}
+                        phoneticUk={wordDetail.phonetic.uk || undefined}
+                        phoneticUs={wordDetail.phonetic.us || undefined}
+                        audioUk={wordDetail.phonetic.ukAudio || undefined}
+                        audioUs={wordDetail.phonetic.usAudio || undefined}
                         wordId={wordDetail.id}
                     />
 
@@ -101,7 +105,7 @@ function SearchPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* 记忆联想图(占位) */}
-                        <MemoryImageCard word={wordDetail.spelling} />
+                        <MemoryImageCard word={wordDetail.word} />
                     </div>
                 </div>
             )}

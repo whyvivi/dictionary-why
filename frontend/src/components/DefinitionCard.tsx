@@ -20,23 +20,23 @@ function DefinitionCard({ senses }: DefinitionCardProps) {
 
             <div className="space-y-6">
                 {senses.map((sense) => (
-                    <div key={sense.senseOrder} className="border-l-4 border-blue-400 pl-4">
+                    <div key={sense.id} className="border-l-4 border-blue-400 pl-4">
                         {/* 词性标签 */}
                         <div className="mb-2">
                             <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                                {sense.partOfSpeech}
+                                {sense.pos}
                             </span>
                         </div>
 
                         {/* 英文释义 */}
                         <p className="text-gray-800 text-lg mb-2">
-                            {sense.definitionEn}
+                            {sense.enDefinition}
                         </p>
 
                         {/* 中文释义 */}
-                        {sense.definitionZh ? (
+                        {sense.cn ? (
                             <p className="text-gray-600">
-                                {sense.definitionZh}
+                                {sense.cn}
                             </p>
                         ) : (
                             <p className="text-gray-400 text-sm italic">

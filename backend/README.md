@@ -56,7 +56,40 @@ JWT_EXPIRES_IN="7d"
 
 # 服务端口
 PORT=3000
+
+# 硅基流动 LLM 配置（用于生成中文释义和例句）
+SILICONFLOW_API_KEY="sk-your-api-key-here"
+SILICONFLOW_BASE_URL="https://api.siliconflow.cn/v1"
+LLM_MODEL_ID="deepseek-ai/DeepSeek-R1-0528-Qwen3-8B"
 ```
+
+#### 硅基流动 LLM 配置说明
+
+硅基流动 LLM 用于为查询的单词自动生成中文释义和英文例句（带中文翻译）。
+
+**获取 API Key：**
+
+1. 访问硅基流动官网：https://cloud.siliconflow.cn
+2. 注册并登录账号
+3. 进入 API 密钥管理页面：https://cloud.siliconflow.cn/account/ak
+4. 创建新的 API Key 并复制
+
+**本地开发配置：**
+
+在 `.env` 文件中添加以下配置（替换为你的真实 API Key）：
+
+```env
+SILICONFLOW_API_KEY=sk-rcmhbkcgxcbtpsekzfkwluxaadqpvvgclbczohsuvofvvyfq
+```
+
+> **安全提示**：不要将真实的 API Key 提交到 Git 仓库！
+
+**云端部署配置：**
+
+在 Render 的环境变量设置中添加：
+- `SILICONFLOW_API_KEY`：你的硅基流动 API Key
+- `SILICONFLOW_BASE_URL`：（可选）默认为 `https://api.siliconflow.cn/v1`
+- `LLM_MODEL_ID`：（可选）默认为 `deepseek-ai/DeepSeek-R1-0528-Qwen3-8B`
 
 ### 3. 初始化数据库
 
@@ -102,6 +135,9 @@ npm run dev
 |--------|------|--------|
 | `JWT_EXPIRES_IN` | JWT 过期时间 | `7d` |
 | `PORT` | 服务端口(Render 会自动设置) | `3000` |
+| `SILICONFLOW_API_KEY` | 硅基流动 API Key（用于 LLM 生成例句） | 无，需手动配置 |
+| `SILICONFLOW_BASE_URL` | 硅基流动 API 地址 | `https://api.siliconflow.cn/v1` |
+| `LLM_MODEL_ID` | LLM 模型 ID | `deepseek-ai/DeepSeek-R1-0528-Qwen3-8B` |
 
 #### 配置步骤
 

@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DictionaryService } from './dictionary.service';
-import { WordDetailDto, WordSearchResultDto } from './dto/word.dto';
+import { WordSearchResultDto, UnifiedWordDetailDto } from './dto/word.dto';
 
 /**
  * 单词查询控制器
@@ -14,7 +14,7 @@ export class WordsController {
     constructor(private readonly dictionaryService: DictionaryService) { }
 
     /**
-     * 搜索单词(前缀匹配)
+     * 搜索单词（前缀匹配）
      * GET /api/words/search?query=app
      * @param query 搜索关键词
      * @returns 匹配的单词列表
@@ -32,11 +32,19 @@ export class WordsController {
     /**
      * 获取单词详情
      * GET /api/words/:spelling
+     * 
+     * 返回统一的单词详情结构，包含：
+     * - word: 单词原文
+     * - phonetic: 音标（英式、美式、通用）
+     * - senses: 词义列表（包含词性、中文释义、英文释义、例句）
+     * - source: 数据来源
+     * - cached: 是否来自缓存
+     * 
      * @param spelling 单词拼写
-     * @returns 单词详情(包括音标、释义、例句)
+     * @returns 单词详情（统一格式）
      */
     @Get(':spelling')
-    async getWordDetail(@Param('spelling') spelling: string): Promise<WordDetailDto> {
+    async getWordDetail(@Param('spelling') spelling: string): Promise<UnifiedWordDetailDto> {
         return await this.dictionaryService.getWordDetail(spelling);
     }
 }

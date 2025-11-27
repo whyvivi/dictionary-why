@@ -1,0 +1,5 @@
+注意：项目已经在云端使用 PostgreSQL 数据库，请不要把 Prisma schema 改成 SQLite，也不要改动 `DATABASE_URL` 的数据库类型。如需本地调试，
+请保持 provider = "postgresql"，只在本地使用同类型的 PostgreSQL。
+
+
+后面所有的注释和相关说明都要用中文。

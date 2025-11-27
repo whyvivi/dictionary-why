@@ -16,7 +16,7 @@ function ExampleCard({ senses }: ExampleCardProps) {
     const allExamples = senses.flatMap(sense =>
         sense.examples.map(ex => ({
             ...ex,
-            partOfSpeech: sense.partOfSpeech,
+            pos: sense.pos,
         }))
     );
 
@@ -40,19 +40,19 @@ function ExampleCard({ senses }: ExampleCardProps) {
                 {displayedExamples.map((example, index) => (
                     <div key={index} className="bg-white bg-opacity-50 rounded-2xl p-4">
                         {/* 英文例句 */}
-                        {example.sentenceEn && (
+                        {example.en && (
                             <p className="text-gray-800 text-lg mb-2 leading-relaxed">
-                                "{example.sentenceEn}"
+                                "{example.en}"
                             </p>
                         )}
 
                         {/* 中文翻译 */}
-                        {example.sentenceZh ? (
+                        {example.cn ? (
                             <p className="text-gray-600">
-                                "{example.sentenceZh}"
+                                "{example.cn}"
                             </p>
                         ) : (
-                            example.sentenceEn && (
+                            example.en && (
                                 <p className="text-gray-400 text-sm italic">
                                     中文翻译待补充
                                 </p>
