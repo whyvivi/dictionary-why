@@ -2,7 +2,6 @@ import { Outlet } from 'react-router-dom';
 import Header from '../components/Header';
 import TabBar from '../components/TabBar';
 import image2 from '../assets/image2.png';
-import image3 from '../assets/image3.png';
 
 /**
  * 主布局组件
@@ -27,9 +26,6 @@ function MainLayout() {
             {/* 装饰云朵 - 使用 CSS 动画漂浮 */}
             <div className="fixed top-20 right-[10%] w-32 opacity-60 pointer-events-none select-none z-0 animate-float-slow">
                 <img src={image2} alt="" className="w-full" />
-            </div>
-            <div className="fixed bottom-32 left-[5%] w-24 opacity-50 pointer-events-none select-none z-0 animate-float-slower">
-                <img src={image3} alt="" className="w-full" />
             </div>
 
             {/* 光晕效果 - 纯 CSS 实现 */}

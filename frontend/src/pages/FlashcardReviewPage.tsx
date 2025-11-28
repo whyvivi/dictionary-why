@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { flashcardApi, Flashcard } from '../utils/flashcardApi';
+// 导入学习统计工具（为吉祥物气泡提供数据）
+import { saveLearningStats } from '../utils/learningStats';
 
 /**
  * 闪卡复习页面 - 翻牌式UI
@@ -24,6 +26,12 @@ function FlashcardReviewPage() {
         try {
             const cards = await flashcardApi.getTodayFlashcards();
             setFlashcards(cards);
+
+            // 【新增】更新学习统计：记录待复习的闪卡数量
+            // 为吉祥物气泡提供数据支持
+            saveLearningStats({
+                pendingFlashcards: cards.length,
+            });
         } catch (error) {
             console.error('加载今日闪卡失败:', error);
         } finally {
@@ -214,8 +222,8 @@ function FlashcardReviewPage() {
                             onClick={() => handleReview('again')}
                             disabled={isReviewing || !isFlipped}
                             className={`flex-1 max-w-xs py-4 rounded-2xl font-medium text-lg shadow-lg transition-all ${isFlipped
-                                    ? 'bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white'
-                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                ? 'bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white'
+                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                 }`}
                         >
                             ❌ 不认识
@@ -224,8 +232,8 @@ function FlashcardReviewPage() {
                             onClick={() => handleReview('good')}
                             disabled={isReviewing || !isFlipped}
                             className={`flex-1 max-w-xs py-4 rounded-2xl font-medium text-lg shadow-lg transition-all ${isFlipped
-                                    ? 'bg-gradient-to-r from-teal-400 to-green-400 hover:from-teal-500 hover:to-green-500 text-white'
-                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                ? 'bg-gradient-to-r from-teal-400 to-green-400 hover:from-teal-500 hover:to-green-500 text-white'
+                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                 }`}
                         >
                             ✅ 认识

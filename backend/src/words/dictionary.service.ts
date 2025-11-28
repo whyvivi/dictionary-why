@@ -284,4 +284,117 @@ export class DictionaryService {
 
         return words;
     }
+
+    /**
+     * 获取「今日一词」
+     * 优先从用户收藏的单词中随机选择，若无收藏则从 Word 表随机选择
+     * 
+     * @param userId 用户ID（可选）
+     * @returns 今日推荐单词（包含单词ID、拼写、简短中文释义、例句）
+     */
+    async getWordOfTheDay(userId?: number): Promise<{
+        wordId: number;
+        text: string;
+        simpleChinese: string;
+        exampleSentence: string;
+    }> {
+        try {
+            let selectedWord: { id: number; spelling: string } | null = null;
+
+            // 1. 优先从用户收藏的单词中随机选择
+            if (userId) {
+                const collectedWords = await this.prisma.notebookWord.findMany({
+                    where: {
+                        notebook: {
+                            userId: userId,
+                        },
+                    },
+                    include: {
+                        word: {
+                            select: {
+                                id: true,
+                                spelling: true,
+                            },
+                        },
+                    },
+                    take: 100, // 限制查询数量，避免性能问题
+                });
+
+                if (collectedWords.length > 0) {
+                    // 随机选择一个收藏的单词
+                    const randomIndex = Math.floor(Math.random() * collectedWords.length);
+                    selectedWord = collectedWords[randomIndex].word;
+                    this.logger.log(`今日一词从用户收藏中选择: ${selectedWord.spelling}`);
+                }
+            }
+
+            // 2. 若用户没有收藏或未登录，从 Word 表中随机选择
+            if (!selectedWord) {
+                const totalCount = await this.prisma.word.count();
+                if (totalCount > 0) {
+                    const randomSkip = Math.floor(Math.random() * totalCount);
+                    const randomWord = await this.prisma.word.findFirst({
+                        skip: randomSkip,
+                        select: {
+                            id: true,
+                            spelling: true,
+                        },
+                    });
+                    if (randomWord) {
+                        selectedWord = randomWord;
+                        this.logger.log(`今日一词从 Word 表随机选择: ${selectedWord.spelling}`);
+                    }
+                }
+            }
+
+            // 3. 获取选中单词的详细信息
+            if (selectedWord) {
+                const wordDetail = await this.findWordInDatabase(selectedWord.spelling);
+
+                if (wordDetail && wordDetail.senses && wordDetail.senses.length > 0) {
+                    const firstSense = wordDetail.senses[0];
+
+                    // 提取简短中文释义
+                    const simpleChinese = firstSense.definitionZh ||
+                        firstSense.definitionEn?.substring(0, 50) ||
+                        '暂无释义';
+
+                    // 提取例句（优先中文，否则英文）
+                    let exampleSentence = 'No example available.';
+                    if (firstSense.examples && firstSense.examples.length > 0) {
+                        const firstExample = firstSense.examples[0];
+                        exampleSentence = firstExample.sentenceZh ||
+                            firstExample.sentenceEn ||
+                            'No example available.';
+                    }
+
+                    return {
+                        wordId: selectedWord.id,
+                        text: selectedWord.spelling,
+                        simpleChinese,
+                        exampleSentence,
+                    };
+                }
+            }
+
+            // 4. Fallback：默认返回 hello
+            this.logger.warn('今日一词未能从数据库选择，使用 fallback');
+            return {
+                wordId: -1,
+                text: 'hello',
+                simpleChinese: '你好；问候用语',
+                exampleSentence: 'Hello! It is nice to see you here.',
+            };
+
+        } catch (error) {
+            this.logger.error('获取今日一词失败', error);
+            // 出错时返回 fallback
+            return {
+                wordId: -1,
+                text: 'hello',
+                simpleChinese: '你好；问候用语',
+                exampleSentence: 'Hello! It is nice to see you here.',
+            };
+        }
+    }
 }

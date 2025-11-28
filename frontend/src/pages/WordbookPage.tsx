@@ -2,13 +2,29 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { notebookApi, NotebookWord } from '../utils/notebookApi';
+// 导入学习统计工具（为吉祥物气泡和学习概览提供数据）
+import { loadLearningStats, saveLearningStats } from '../utils/learningStats';
+// 文章生成难度类型与标签
+import { ArticleDifficulty } from '../types/articleDifficulty';
+// 本地文章缓存工具
+import {
+    loadCachedArticles,
+    saveCachedArticle,
+    CachedArticle,
+    loadArticleGenerationStatus,
+    markArticleGenerating,
+    markArticleGenerateFinished,
+    clearArticleGenerationStatus,
+} from '../utils/articleCache';
+// 右侧文章展示面板
+import GeneratedArticlesPanel from '../components/GeneratedArticlesPanel';
 
-// 难度选项配置
-const DIFFICULTY_OPTIONS = [
-    { value: 'primary', label: '小学生', emoji: '🧒📘' },
-    { value: 'highschool', label: '高中生', emoji: '🎓📙' },
-    { value: 'cet4', label: 'CET4', emoji: '📘🇬🇧' },
-    { value: 'cet6', label: 'CET6', emoji: '📚🔥' },
+// 难度选项配置（弹窗选择用，结合统一难度类型）
+const DIFFICULTY_OPTIONS: { value: ArticleDifficulty; label: string; emoji: string }[] = [
+    { value: 'primary', label: '小学生难度', emoji: '🧸' },
+    { value: 'highschool', label: '高中生难度', emoji: '👦' },
+    { value: 'cet4', label: 'CET-4', emoji: '📚' },
+    { value: 'cet6', label: 'CET-6', emoji: '🎓' },
 ];
 
 /**
@@ -24,7 +40,8 @@ function WordbookPage() {
     // 生成文章相关状态
     const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
-    const [generatedArticle, setGeneratedArticle] = useState<{ english: string; chinese: string } | null>(null);
+    const [generatingDifficulty, setGeneratingDifficulty] = useState<ArticleDifficulty | null>(null);
+    const [articles, setArticles] = useState<CachedArticle[]>([]);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     // 加载默认单词本的单词列表
@@ -38,6 +55,12 @@ function WordbookPage() {
             // 获取单词详情
             const detail = await notebookApi.getDetail(notebook.id);
             setWords(detail.words);
+
+            // 【新增】更新学习统计：记录收藏的单词总数
+            // 为吉祥物气泡提供数据支持
+            saveLearningStats({
+                totalCollectedWords: detail.words.length,
+            });
         } catch (error) {
             console.error('加载收藏单词失败:', error);
         } finally {
@@ -47,6 +70,26 @@ function WordbookPage() {
 
     useEffect(() => {
         loadWords();
+    }, []);
+
+    // 页面挂载时加载本地缓存文章，保证切页/刷新后仍可恢复
+    useEffect(() => {
+        const cached = loadCachedArticles();
+        setArticles(cached);
+
+        // 恢复生成中的状态：仅在对应难度尚无文章且未超时的情况下重新显示 loading
+        const genStatus = loadArticleGenerationStatus();
+        if (genStatus) {
+            const { difficulty } = genStatus;
+            const hasArticleForDifficulty = cached.some(a => a.difficulty === difficulty);
+            if (!hasArticleForDifficulty) {
+                setIsGenerating(true);
+                setGeneratingDifficulty(difficulty);
+            } else {
+                // 如果已经有文章，说明已完成，清理 pending 状态
+                clearArticleGenerationStatus();
+            }
+        }
     }, []);
 
     // 移除单词（取消收藏）
@@ -81,7 +124,7 @@ function WordbookPage() {
     /**
      * 处理生成文章
      */
-    const handleGenerate = async (level: string) => {
+    const handleGenerate = async (level: ArticleDifficulty) => {
         // 关闭难度选择 Modal
         setShowGenerateModal(false);
 
@@ -96,9 +139,13 @@ function WordbookPage() {
 
         // 开始生成
         setIsGenerating(true);
+        setGeneratingDifficulty(level);
         setErrorMessage(null);
-        setGeneratedArticle(null);
 
+        // 记录生成中的状态（跨页面保留 loading）
+        markArticleGenerating(level);
+
+        let success = false;
         try {
             // 使用统一的 api 实例，会自动添加 JWT token
             const response = await api.post('/articles/generate-from-words', {
@@ -106,12 +153,36 @@ function WordbookPage() {
                 level
             });
 
-            setGeneratedArticle(response.data);
+            const { english, chinese } = response.data;
+
+            // 将生成结果写入本地缓存（按难度区分，覆盖同难度的旧稿）
+            saveCachedArticle({
+                difficulty: level,
+                contentEn: english,
+                contentZh: chinese,
+            });
+
+            // 同步页面内的文章列表（立即刷新右侧面板）
+            setArticles(loadCachedArticles());
+
+            // 【新增】生成文章成功后统计当日次数，供吉祥物/学习概览使用
+            const today = new Date().toISOString().slice(0, 10);
+            const stats = loadLearningStats();
+            const prev = stats.generatedArticlesToday ?? 0;
+            saveLearningStats({
+                generatedArticlesToday: prev + 1,
+                generatedArticlesDate: today,
+            });
+
+            success = true;
         } catch (error: any) {
             const msg = error.response?.data?.message || '生成文章失败，请稍后重试';
             setErrorMessage(msg);
         } finally {
+            // 标记完成（成功/失败都会清除 pending）
+            markArticleGenerateFinished(success);
             setIsGenerating(false);
+            setGeneratingDifficulty(null);
         }
     };
 
@@ -134,127 +205,101 @@ function WordbookPage() {
                 </button>
             )}
 
-            {/* 加载状态 */}
-            {isLoading && (
-                <div className="bg-white/40 backdrop-blur-sm rounded-3xl shadow-xl p-12 text-center">
-                    <div className="animate-spin w-12 h-12 border-4 border-blue-400 border-t-transparent rounded-full mx-auto mb-4"></div>
-                    <p className="text-gray-600">加载中...</p>
-                </div>
-            )}
+            {/* 中部布局：lg 及以上左右两列，小屏纵向堆叠 */}
+            <div className="mt-4 lg:grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.8fr)] lg:gap-6">
+                {/* 左列：单词列表及空状态 */}
+                <section className="space-y-3">
+                    {/* 加载状态 */}
+                    {isLoading && (
+                        <div className="bg-white/40 backdrop-blur-sm rounded-3xl shadow-xl p-12 text-center">
+                            <div className="animate-spin w-12 h-12 border-4 border-blue-400 border-t-transparent rounded-full mx-auto mb-4"></div>
+                            <p className="text-gray-600">加载中...</p>
+                        </div>
+                    )}
 
-            {/* 单词列表 */}
-            {!isLoading && words.length > 0 && (
-                <div className="space-y-3">
-                    {words.map((word) => (
-                        <div
-                            key={word.wordId}
-                            className="bg-white/40 backdrop-blur-sm rounded-2xl p-5 border border-white/50 shadow-md hover:shadow-lg transition-all group"
-                        >
-                            <div className="flex items-center justify-between">
-                                {/* 左侧：单词信息 - 点击可跳转 */}
+                    {/* 单词列表 */}
+                    {!isLoading && words.length > 0 && (
+                        <div className="space-y-3">
+                            {words.map((word) => (
                                 <div
-                                    onClick={() => handleWordClick(word.spelling)}
-                                    className="flex-1 cursor-pointer"
+                                    key={word.wordId}
+                                    className="bg-white/40 backdrop-blur-sm rounded-2xl p-5 border border-white/50 shadow-md hover:shadow-lg transition-all group"
                                 >
-                                    <div className="flex items-baseline gap-3 mb-1">
-                                        <h3 className="text-xl font-semibold text-gray-800 group-hover:text-blue-600 transition-colors">
-                                            {word.spelling}
-                                        </h3>
-                                        {word.phoneticUk && (
-                                            <span className="text-sm text-gray-500 font-mono">
-                                                /{word.phoneticUk}/
-                                            </span>
-                                        )}
+                                    <div className="flex items-center justify-between">
+                                        {/* 左侧：单词信息 - 点击可跳转 */}
+                                        <div
+                                            onClick={() => handleWordClick(word.spelling)}
+                                            className="flex-1 cursor-pointer"
+                                        >
+                                            <div className="flex items-baseline gap-3 mb-1">
+                                                <h3 className="text-xl font-semibold text-gray-800 group-hover:text-blue-600 transition-colors">
+                                                    {word.spelling}
+                                                </h3>
+                                                {word.phoneticUk && (
+                                                    <span className="text-sm text-gray-500 font-mono">
+                                                        /{word.phoneticUk}/
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {word.definition && (
+                                                <p className="text-gray-600 text-sm line-clamp-2">
+                                                    {word.definition}
+                                                </p>
+                                            )}
+                                            <p className="text-gray-400 text-xs mt-1">
+                                                收藏于 {formatDate(word.addedAt)}
+                                            </p>
+                                        </div>
+
+                                        {/* 右侧：删除按钮 */}
+                                        <button
+                                            onClick={() => handleRemoveWord(word.wordId)}
+                                            className="ml-4 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                            title="移除收藏"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
                                     </div>
-                                    {word.definition && (
-                                        <p className="text-gray-600 text-sm line-clamp-2">
-                                            {word.definition}
-                                        </p>
-                                    )}
-                                    <p className="text-gray-400 text-xs mt-1">
-                                        收藏于 {formatDate(word.addedAt)}
-                                    </p>
                                 </div>
-
-                                {/* 右侧：删除按钮 */}
-                                <button
-                                    onClick={() => handleRemoveWord(word.wordId)}
-                                    className="ml-4 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                    title="移除收藏"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {/* 空状态 */}
-            {!isLoading && words.length === 0 && (
-                <div className="bg-white/40 backdrop-blur-sm rounded-3xl shadow-xl p-16 text-center">
-                    <div className="text-6xl mb-4">📚</div>
-                    <h3 className="text-2xl font-semibold text-gray-800 mb-3">你还没有收藏任何单词~</h3>
-                    <p className="text-gray-600 mb-6">
-                        去查词页面试着收藏一个吧！
-                    </p>
-                    <button
-                        onClick={() => navigate('/search')}
-                        className="px-8 py-3 bg-gradient-to-r from-blue-400 to-indigo-400 text-white rounded-full hover:from-blue-500 hover:to-indigo-500 transition-all shadow-md font-medium"
-                    >
-                        开始查词
-                    </button>
-                </div>
-            )}
-
-            {/* 生成的文章展示区域 */}
-            {(isGenerating || generatedArticle || errorMessage) && (
-                <section className="mt-6 bg-white/70 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/60">
-                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <span>📄</span>
-                        <span>AI 生成的文章</span>
-                    </h2>
-
-                    {isGenerating && (
-                        <div className="text-center py-8">
-                            <div className="animate-spin w-12 h-12 border-4 border-purple-400 border-t-transparent rounded-full mx-auto mb-4"></div>
-                            <p className="text-gray-600">正在生成文章，请稍候…</p>
+                            ))}
                         </div>
                     )}
 
-                    {errorMessage && (
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-                            {errorMessage}
-                        </div>
-                    )}
-
-                    {generatedArticle && (
-                        <div className="space-y-4">
-                            <div>
-                                <h3 className="text-sm font-semibold text-gray-600 mb-2 flex items-center gap-1">
-                                    <span>🇬🇧</span>
-                                    <span>英文原文</span>
-                                </h3>
-                                <p className="whitespace-pre-wrap text-gray-800 text-sm leading-relaxed bg-white/50 rounded-lg p-4">
-                                    {generatedArticle.english}
-                                </p>
-                            </div>
-
-                            <div>
-                                <h3 className="text-sm font-semibold text-gray-600 mb-2 flex items-center gap-1">
-                                    <span>🇨🇳</span>
-                                    <span>中文翻译</span>
-                                </h3>
-                                <p className="whitespace-pre-wrap text-gray-800 text-sm leading-relaxed bg-white/50 rounded-lg p-4">
-                                    {generatedArticle.chinese}
-                                </p>
-                            </div>
+                    {/* 空状态 */}
+                    {!isLoading && words.length === 0 && (
+                        <div className="bg-white/40 backdrop-blur-sm rounded-3xl shadow-xl p-16 text-center">
+                            <div className="text-6xl mb-4">📚</div>
+                            <h3 className="text-2xl font-semibold text-gray-800 mb-3">你还没有收藏任何单词~</h3>
+                            <p className="text-gray-600 mb-6">
+                                去查词页面试着收藏一个吧！
+                            </p>
+                            <button
+                                onClick={() => navigate('/search')}
+                                className="px-8 py-3 bg-gradient-to-r from-blue-400 to-indigo-400 text-white rounded-full hover:from-blue-500 hover:to-indigo-500 transition-all shadow-md font-medium"
+                            >
+                                开始查词
+                            </button>
                         </div>
                     )}
                 </section>
-            )}
+
+                {/* 右列：AI 文章区域（缓存 + 多难度） */}
+                <section className="mt-6 lg:mt-0 space-y-3">
+                    {errorMessage && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
+                            {errorMessage}
+                        </div>
+                    )}
+                    <GeneratedArticlesPanel
+                        isGenerating={isGenerating}
+                        generatingDifficulty={generatingDifficulty}
+                        externalArticles={articles}
+                        onArticlesChange={setArticles}
+                    />
+                </section>
+            </div>
 
             {/* 难度选择 Modal */}
             {showGenerateModal && (

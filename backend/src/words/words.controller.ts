@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DictionaryService } from './dictionary.service';
 import { WordSearchResultDto, UnifiedWordDetailDto } from './dto/word.dto';
@@ -27,6 +27,24 @@ export class WordsController {
 
         const results = await this.dictionaryService.searchWords(query);
         return results;
+    }
+
+    /**
+     * 获取今日一词
+     * GET /api/words/word-of-the-day
+     * 
+     * 返回一个推荐学习的单词（优先从用户收藏中随机选择）
+     * @returns 今日一词数据（单词ID、拼写、简短释义、例句）
+     */
+    @Get('word-of-the-day')
+    async getWordOfTheDay(@Req() req): Promise<{
+        wordId: number;
+        text: string;
+        simpleChinese: string;
+        exampleSentence: string;
+    }> {
+        const userId = req.user?.id; // 从 JWT 中获取用户ID
+        return await this.dictionaryService.getWordOfTheDay(userId);
     }
 
     /**
